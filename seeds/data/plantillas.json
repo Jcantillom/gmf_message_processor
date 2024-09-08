@@ -1,0 +1,35 @@
+[
+  {
+    "IDPlantilla": "PC001",
+    "Asunto": "CGMFD - Rechazo archivo transaccional",
+    "Cuerpo": "El CGMFD ha rechazado en archivo transaccional &nombre_archivo recibido de &plataforma_origen el &fecha_recepcion a las &hora_recepcion. </br>Motivo rechazo:  &codigo_rechazo - &descripcion_rechazo </br>Detalle rechazo: &detalle_rechazo",
+    "Remitente": "cgmf-davivienda@davivienda.com",
+    "Destinatario": "pedro.perez@davivienda.com,maria.perez@davivienda.com,mluz@davivienda.com",
+    "Adjunto": false
+  },
+  {
+    "IDPlantilla": "PC002",
+    "Asunto": "CGMFD - Rechazo archivo transaccional",
+    "Cuerpo": "El CGMFD ha rechazado en archivo transaccional &nombre_archivo recibido de &plataforma_origen el &fecha_recepcion a las &hora_recepcion. </br>Motivo rechazo:  &codigo_rechazo - &descripcion_rechazo",
+    "Remitente": "cgmf-davivienda@davivienda.com",
+    "Destinatario": "",
+    "Adjunto": false
+  },
+  {
+    "IDPlantilla": "PC003",
+    "Asunto": "CGMFD - Rechazo archivo transaccional",
+    "Cuerpo": "El CGMFD ha rechazado en archivo transaccional &nombre_archivo recibido de &plataforma_origen el &fecha_recepcion a las &hora_recepcion. </br>Motivo rechazo:  &codigo_rechazo - &descripcion_rechazo </br>El detalle de los registros con error que se alcanzaron a validar se encuentra en reporte con nombre &nombre_archivo_incidentes el cual puede descargar de DAVIBOX",
+    "Remitente": "cgmf-davivienda@davivienda.com",
+    "Destinatario": "",
+    "Adjunto": false
+  },
+  {
+    "IDPlantilla": "PC013",
+    "Asunto": "CGMFD - Falla tecnica en ejecución de proceso sin reprogramación",
+    "Cuerpo": "Se presentan fallas tecnicas durante la ejecución del proceso de &nombre_proceso para el archivo &nombre_archivo_rta recibido de TransUnion el &fecha_recepcion a las &hora_recepcion. Debido a que no es posible volver a programar la ejecución, este archivo se enviará a la carpeta de cargues fallidos.</br>Motivo falla:  &codigo_falla - &descripcion_falla </br>Detalle falla: &detalle_falla",
+    "Remitente": "cgmf-davivienda@davivienda.com",
+    "Destinatario": "",
+    "Adjunto": false
+  }
+]
+

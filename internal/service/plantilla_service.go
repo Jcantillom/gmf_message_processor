@@ -5,15 +5,37 @@ import (
 	"errors"
 	"gmf_message_processor/internal/email"
 	"gmf_message_processor/internal/models"
-	"gmf_message_processor/internal/repository"
 	"gmf_message_processor/internal/utils"
 	"log"
 )
 
+type EmailService interface {
+	SendEmail(remitente, destinatarios, asunto, cuerpo string) error
+}
+
+// PlantillaRepository define la interfaz para el repositorio de Plantilla.
+type PlantillaRepository interface {
+	CheckPlantillaExists(idPlantilla string) (bool, *models.Plantilla, error)
+}
+
+// PlantillaService define el servicio que maneja la lógica de negocio para Plantilla.
+type PlantillaService struct {
+	repo         PlantillaRepository
+	emailService EmailService
+}
+
+// NewPlantillaService crea una nueva instancia de PlantillaService.
+func NewPlantillaService(repo PlantillaRepository, emailService EmailService) *PlantillaService {
+	return &PlantillaService{
+		repo:         repo,
+		emailService: emailService,
+	}
+}
+
 // HandlePlantilla maneja la lógica de negocio para la plantilla.
-func HandlePlantilla(ctx context.Context, msg *models.SQSMessage) error {
+func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSMessage) error {
 	// Verificar si la plantilla existe en la base de datos
-	exists, plantilla, err := repository.CheckPlantillaExists(msg.IDPlantilla)
+	exists, plantilla, err := s.repo.CheckPlantillaExists(msg.IDPlantilla)
 	if err != nil {
 		return err
 	}

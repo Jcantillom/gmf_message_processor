@@ -4,7 +4,7 @@
     "Asunto": "CGMFD - Rechazo archivo transaccional",
     "Cuerpo": "El CGMFD ha rechazado en archivo transaccional &nombre_archivo recibido de &plataforma_origen el &fecha_recepcion a las &hora_recepcion. </br>Motivo rechazo:  &codigo_rechazo - &descripcion_rechazo </br>Detalle rechazo: &detalle_rechazo",
     "Remitente": "cgmf-davivienda@davivienda.com",
-    "Destinatario": "pedro.perez@davivienda.com,maria.perez@davivienda.com,mluz@davivienda.com",
+    "Destinatario": "maria.perez@davivienda.com,juanjo0216@gmail.com",
     "Adjunto": false
   },
   {

@@ -9,6 +9,12 @@ import (
 	"strings"
 )
 
+// smtpSendMailFunc es un tipo de función que representa la función smtp.SendMail.
+type smtpSendMailFunc func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
+
+// smtpSendMailWrapper es una función de envoltorio para smtp.SendMail.
+var smtpSendMailWrapper smtpSendMailFunc = smtp.SendMail
+
 // SendEmail envía un correo electrónico a los destinatarios proporcionados.
 func SendEmail(remitente, destinatarios, asunto, cuerpo string) error {
 	// Cargar configuración SMTP desde variables de entorno
@@ -37,8 +43,8 @@ func SendEmail(remitente, destinatarios, asunto, cuerpo string) error {
 
 	msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s", strings.Join(to, ", "), asunto, cuerpo))
 
-	// Enviar el correo electrónico
-	err = smtp.SendMail(smtpServer+":"+smtpPort, auth, remitente, to, msg)
+	// Usar la función de envoltorio smtpSendMailWrapper
+	err = smtpSendMailWrapper(smtpServer+":"+smtpPort, auth, remitente, to, msg)
 	if err != nil {
 		return fmt.Errorf("error enviando el correo electrónico: %v", err)
 	}

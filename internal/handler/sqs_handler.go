@@ -8,7 +8,7 @@ import (
 )
 
 // ProcessSQSMessages procesa los mensajes desde un archivo JSON en la carpeta test_data.
-func ProcessSQSMessages(ctx context.Context) (int, error) {
+func ProcessSQSMessages(ctx context.Context, plantillaService *service.PlantillaService) (int, error) {
 	// Leer el evento SQS desde el archivo JSON usando la función ReadSQSEventFromFile de utils.
 	sqsEvent, err := utils.ReadSQSEventFromFile("test_data/message.json")
 	if err != nil {
@@ -27,7 +27,7 @@ func ProcessSQSMessages(ctx context.Context) (int, error) {
 		}
 
 		// Llamar al servicio para manejar la lógica de negocio
-		if err := service.HandlePlantilla(ctx, validMsg); err != nil {
+		if err := plantillaService.HandlePlantilla(ctx, validMsg); err != nil {
 			log.Printf("Error al procesar el mensaje para IDPlantilla: %s: %v", validMsg.IDPlantilla, err)
 			return processed, err // Devolver el error inmediatamente al encontrar un problema
 		} else {

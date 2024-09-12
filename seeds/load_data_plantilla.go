@@ -2,14 +2,14 @@ package seeds
 
 import (
 	"encoding/json"
-	"gmf_message_processor/connections"
+	"gmf_message_processor/connection"
 	"gmf_message_processor/internal/models"
 	"log"
 	"os"
 )
 
-// SeedDataPlantilla inserta datos de semilla en la base de datos
-func SeedDataPlantilla() {
+// SeedDataPlantilla inserta datos de semilla en la base de datos utilizando una instancia de DBManager.
+func SeedDataPlantilla(dbManager *connection.DBManager) {
 	// Leer datos del archivo JSON
 	plantillas, err := loadPlantillaFromJSON("seeds/data/plantillas.json")
 	if err != nil {
@@ -26,14 +26,14 @@ func SeedDataPlantilla() {
 
 		// Verificar si la plantilla ya existe en la base de datos
 		var existingPlantilla models.Plantilla
-		if err := connections.DB.Where(
+		if err := dbManager.DB.Where(
 			"id_plantilla = ?", plantilla.IDPlantilla).First(&existingPlantilla).Error; err == nil {
 			log.Printf("La plantilla con ID %s ya existe en la base de datos. ⚠️", plantilla.IDPlantilla)
 			continue // Saltar si ya existe
 		}
 
 		// Insertar la plantilla en la base de datos
-		if err := connections.DB.Create(&plantilla).Error; err != nil {
+		if err := dbManager.DB.Create(&plantilla).Error; err != nil {
 			log.Fatalf("Error al insertar datos de semilla en la base de datos ❌: %v", err)
 		} else {
 			log.Printf(

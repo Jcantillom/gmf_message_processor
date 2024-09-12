@@ -3,13 +3,20 @@ package config
 import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
-	"gmf_message_processor/connections"
 	"log"
 )
 
-// InitConfig initializes the configuration by loading environment variables.
-func InitConfig() {
-	// Load .env file if it exists
+// Manager ConfigManager maneja la carga de configuración de la aplicación.
+type Manager struct{}
+
+// NewConfigManager crea una nueva instancia de ConfigManager.
+func NewConfigManager() *Manager {
+	return &Manager{}
+}
+
+// InitConfig carga la configuración desde el archivo .env y las variables de entorno.
+func (cm *Manager) InitConfig() {
+	// Cargar el archivo .env si existe
 	if err := godotenv.Load(); err != nil {
 		log.Printf("No .env file found, relying on environment variables.")
 	}
@@ -17,16 +24,10 @@ func InitConfig() {
 	viper.SetEnvPrefix("app")
 	viper.AutomaticEnv()
 
-	// Set default values
+	// Valores predeterminados
 	viper.SetDefault("DB_HOST", "localhost")
 	viper.SetDefault("DB_PORT", "5433")
 	viper.SetDefault("DB_USER", "postgres")
 	viper.SetDefault("DB_PASSWORD", "postgres")
 	viper.SetDefault("DB_NAME", "gmfdb")
-
-	// Initialize the database connection
-	connections.InitDB()
-	// Insertar datos de semilla en la base de datos.
-	//seeds.SeedDataPlantilla()
-
 }

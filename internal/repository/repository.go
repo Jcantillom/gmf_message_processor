@@ -12,8 +12,7 @@ type GormPlantillaRepository struct {
 	DB *gorm.DB
 }
 
-// NewGormPlantillaRepository crea una nueva instancia de GormPlantillaRepository.
-func NewGormPlantillaRepository(db *gorm.DB) *GormPlantillaRepository {
+func NewPlantillaRepository(db *gorm.DB) *GormPlantillaRepository {
 	return &GormPlantillaRepository{DB: db}
 }
 
@@ -21,7 +20,9 @@ func NewGormPlantillaRepository(db *gorm.DB) *GormPlantillaRepository {
 func (repo *GormPlantillaRepository) CheckPlantillaExists(idPlantilla string) (
 	bool, *models.Plantilla, error) {
 	var plantilla models.Plantilla
-	if err := repo.DB.Where("id_plantilla = ?", idPlantilla).First(&plantilla).Error; err != nil {
+	if err := repo.DB.Where(
+		"id_plantilla = ?",
+		idPlantilla).First(&plantilla).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil, nil
 		}

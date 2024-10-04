@@ -1,92 +1,139 @@
 package email
 
 import (
-	"bytes"
 	"errors"
-	"log"
 	"net/smtp"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-// Función de ayuda para capturar la salida del log
-func captureOutput(f func()) string {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-	f()
-	return buf.String()
+// Mock para la función smtpSendMail
+type MockSMTP struct {
+	mock.Mock
 }
 
-func TestSendEmail_Success(t *testing.T) {
-	// Mock de las variables de entorno necesarias
-	os.Setenv("SMTP_SERVER", "smtp.example.com")
-	os.Setenv("SMTP_PORT", "587")
-	os.Setenv("SMTP_USER", "user@example.com")
-	os.Setenv("SMTP_PASSWORD", "password")
-
-	// Mock de la función de envío de correo
-	smtpSendMailWrapper = func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-		return nil
-	}
-
-	// Redirigir la salida de logs y ejecutar la función de envío de correo
-	output := captureOutput(func() {
-		err := SendEmail("from@example.com", "to1@example.com,to2@example.com", "Asunto de Prueba", "Cuerpo del correo")
-		assert.NoError(t, err, "No debería haber error al enviar el correo")
-	})
-
-	// Verificar que el log contenga los destinatarios
-	assert.Contains(t, output, "Enviando correo a los siguientes destinatarios 📧")
-	assert.Contains(t, output, "Correo electrónico enviado con éxito a 📤")
+func (m *MockSMTP) SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	args := m.Called(addr, a, from, to, msg)
+	return args.Error(0)
 }
 
-func TestSendEmail_MissingSMTPConfig(t *testing.T) {
-	// Mock de las variables de entorno necesarias
+func TestSendEmail_IncompleteSMTPConfig(t *testing.T) {
+	// Guarda las configuraciones SMTP actuales para restaurarlas al final de la prueba
+	originalServer := os.Getenv("SMTP_SERVER")
+	originalPort := os.Getenv("SMTP_PORT")
+	originalUser := os.Getenv("SMTP_USER")
+	originalPassword := os.Getenv("SMTP_PASSWORD")
+
+	// Limpia las configuraciones SMTP
 	os.Setenv("SMTP_SERVER", "")
 	os.Setenv("SMTP_PORT", "")
 	os.Setenv("SMTP_USER", "")
 	os.Setenv("SMTP_PASSWORD", "")
 
-	// Mock de la función de envío de correo (no se necesita en esta prueba, pero se puede añadir por consistencia)
-	smtpSendMailWrapper = func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-		return nil
+	// Crear instancia del servicio SMTP
+	emailService := NewSMTPEmailService()
+
+	// Realizar la prueba
+	err := emailService.SendEmail("from@test.com", "to@test.com", "Test Subject", "Test Body")
+	assert.Error(t, err)
+	assert.Equal(t, "error: configuración SMTP incompleta en las variables de entorno", err.Error())
+
+	// Restaurar las configuraciones originales
+	os.Setenv("SMTP_SERVER", originalServer)
+	os.Setenv("SMTP_PORT", originalPort)
+	os.Setenv("SMTP_USER", originalUser)
+	os.Setenv("SMTP_PASSWORD", originalPassword)
+}
+func TestSendEmail_SendMailError(t *testing.T) {
+	mockSMTP := new(MockSMTP)
+	mockSMTP.On(
+		"SendMail",
+		"smtp.test.com:587",
+		mock.Anything,
+		"from@test.com",
+		[]string{"to@test.com"},
+		mock.Anything,
+	).Return(errors.New("error enviando el correo electrónico"))
+
+	emailService := &SMTPEmailService{
+		server:   "smtp.test.com",
+		port:     "587",
+		username: "user@test.com",
+		password: "password",
+		sendMail: mockSMTP.SendMail,
 	}
 
-	// Redirigir la salida de logs y ejecutar la función de envío de correo
-	output := captureOutput(func() {
-		err := SendEmail("from@example.com", "to@example.com", "Asunto de Prueba", "Cuerpo del correo")
-		assert.Error(t, err, "Debería haber un error debido a la configuración SMTP incompleta")
-		assert.Contains(t, err.Error(), "configuración SMTP incompleta en las variables de entorno")
-	})
+	// Realizar la prueba
+	err := emailService.SendEmail("from@test.com", "to@test.com", "Test Subject", "Test Body")
+	assert.Error(t, err)
+	assert.Equal(t, "error enviando el correo electrónico: error enviando el correo electrónico", err.Error())
 
-	// Verificar que el log no contenga los destinatarios porque falló antes
-	assert.NotContains(t, output, "Enviando correo a los siguientes destinatarios 📧")
+	mockSMTP.AssertExpectations(t)
 }
+func TestSendEmail_Success(t *testing.T) {
+	mockSMTP := new(MockSMTP)
+	mockSMTP.On(
+		"SendMail",
+		"smtp.test.com:587",
+		mock.Anything,
+		"from@test.com",
+		[]string{"to@test.com"},
+		mock.Anything,
+	).Return(nil)
 
-func TestSendEmail_ErrorInSMTP(t *testing.T) {
-	// Mock de las variables de entorno necesarias
-	os.Setenv("SMTP_SERVER", "invalid.server.com")
+	emailService := &SMTPEmailService{
+		server:   "smtp.test.com",
+		port:     "587",
+		username: "user@test.com",
+		password: "password",
+		sendMail: mockSMTP.SendMail,
+	}
+
+	// Realizar la prueba
+	err := emailService.SendEmail("from@test.com", "to@test.com", "Test Subject", "Test Body")
+	assert.NoError(t, err)
+
+	mockSMTP.AssertExpectations(t)
+}
+func TestSendEmail_JSONConversionError(t *testing.T) {
+	mockSMTP := new(MockSMTP)
+
+	// Simular configuración SMTP correcta
+	os.Setenv("SMTP_SERVER", "smtp.test.com")
 	os.Setenv("SMTP_PORT", "587")
-	os.Setenv("SMTP_USER", "user@example.com")
+	os.Setenv("SMTP_USER", "user@test.com")
 	os.Setenv("SMTP_PASSWORD", "password")
 
-	// Mock de la función de envío de correo para simular un error
-	smtpSendMailWrapper = func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-		return errors.New("error enviando el correo electrónico")
+	emailService := &SMTPEmailService{
+		server:   os.Getenv("SMTP_SERVER"),
+		port:     os.Getenv("SMTP_PORT"),
+		username: os.Getenv("SMTP_USER"),
+		password: os.Getenv("SMTP_PASSWORD"),
+		sendMail: mockSMTP.SendMail,
 	}
 
-	// Ejecutar la función de envío de correo
-	err := SendEmail(
-		"from@example.com",
-		"to1@example.com,to2@example.com",
-		"Asunto de Prueba",
-		"Cuerpo del correo",
-	)
+	// Configurar mock para que no se espere la llamada a SendMail
+	mockSMTP.On(
+		"SendMail",
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything).Return(nil).Maybe()
 
-	// Verificar que haya un error y que sea el esperado
-	assert.Error(t, err, "Debería haber un error al enviar el correo")
-	assert.Contains(t, err.Error(), "error enviando el correo electrónico", "El error debe contener 'error enviando el correo electrónico'")
+	// Usar una lista de destinatarios que cause un error JSON
+	invalidRecipient := "\x7f"
+	err := emailService.SendEmail(
+		"from@test.com",
+		invalidRecipient,
+		"Test Subject",
+		"Test Body")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error al convertir destinatarios a JSON")
+
+	// Verificar que SendMail nunca fue llamado
+	mockSMTP.AssertNotCalled(t, "SendMail")
 }

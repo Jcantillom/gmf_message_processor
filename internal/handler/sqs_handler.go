@@ -2,39 +2,76 @@ package handler
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"gmf_message_processor/internal/aws"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/service"
 	"gmf_message_processor/internal/utils"
-	"log"
 )
 
-// ProcessSQSMessages procesa los mensajes desde un archivo JSON en la carpeta test_data.
-func ProcessSQSMessages(ctx context.Context, plantillaService *service.PlantillaService) (int, error) {
-	// Leer el evento SQS desde el archivo JSON usando la función ReadSQSEventFromFile de utils.
-	sqsEvent, err := utils.ReadSQSEventFromFile("test_data/message.json")
+// SQSHandler es responsable de recibir y procesar mensajes desde SQS.
+type SQSHandler struct {
+	PlantillaService *service.PlantillaService
+	SQSClient        *aws.SQSClient
+}
+
+// NewSQSHandler crea una nueva instancia de SQSHandler.
+func NewSQSHandler(plantillaService *service.PlantillaService, sqsClient *aws.SQSClient) *SQSHandler {
+	return &SQSHandler{
+		PlantillaService: plantillaService,
+		SQSClient:        sqsClient,
+	}
+}
+
+// ProcessMessage procesa un solo mensaje desde la cola de SQS.
+func (h *SQSHandler) ProcessMessage(ctx context.Context) error {
+	logs.LogProcesandoMensajeSQS(ctx)
+
+	// Recibir un mensaje de SQS
+	output, err := h.SQSClient.Client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+		QueueUrl:            &h.SQSClient.QueueURL,
+		MaxNumberOfMessages: 1,
+		WaitTimeSeconds:     5,
+	})
 	if err != nil {
-		return 0, err
+		logs.LogError(ctx, "Error al recibir mensaje de SQS: %v", err)
+		return err
 	}
 
-	processed := 0 // Contador de mensajes procesados
-
-	// Procesar cada mensaje en el evento
-	for _, message := range sqsEvent.Records {
-		// Validar el mensaje
-		validMsg, err := utils.ValidateSQSMessage(message.Body)
-		if err != nil {
-			log.Printf("Error validando el mensaje ❌: %v", err)
-			continue
-		}
-
-		// Llamar al servicio para manejar la lógica de negocio
-		if err := plantillaService.HandlePlantilla(ctx, validMsg); err != nil {
-			log.Printf("Error al procesar el mensaje para IDPlantilla: %s: %v", validMsg.IDPlantilla, err)
-			return processed, err // Devolver el error inmediatamente al encontrar un problema
-		} else {
-			log.Printf("Mensaje procesado con éxito para IDPlantilla ✅: %s", validMsg.IDPlantilla)
-			processed++ // Incrementar el contador de mensajes procesados
-		}
+	if len(output.Messages) == 0 {
+		logs.LogWarn(ctx, "No hay mensajes en la cola de SQS.")
+		return nil
 	}
 
-	return processed, nil
+	// Procesar el primer mensaje en la cola
+	message := output.Messages[0]
+
+	// Extraer el cuerpo del mensaje
+	messageBody, err := utils.ExtractMessageBody(*message.Body)
+	if err != nil {
+		logs.LogError(ctx, "Error extrayendo el cuerpo del mensaje: %v", err)
+		return err
+	}
+
+	// Validar el mensaje
+	validMsg, err := utils.ValidateSQSMessage(messageBody)
+	if err != nil {
+		logs.LogError(ctx, "Error validando el mensaje: %v", err)
+		return err
+	}
+
+	// Llamar al servicio para manejar la lógica de negocio
+	if err := h.PlantillaService.HandlePlantilla(ctx, validMsg); err != nil {
+		logs.LogError(ctx, "Error al procesar el mensaje: %v", err)
+		return err
+	}
+
+	logs.LogPlantillaEncontrada(ctx, validMsg.IDPlantilla)
+
+	// Eliminar el mensaje de la cola una vez procesado
+	err = utils.DeleteMessageFromQueue(ctx, h.SQSClient.Client, h.SQSClient.QueueURL, message.ReceiptHandle)
+	if err != nil {
+		return err
+	}
+	return nil
 }

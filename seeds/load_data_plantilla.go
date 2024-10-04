@@ -1,26 +1,34 @@
 package seeds
 
 import (
+	"context"
 	"encoding/json"
 	"gmf_message_processor/connection"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
-	"log"
 	"os"
 )
 
-// SeedDataPlantilla inserta datos de semilla en la base de datos utilizando una instancia de DBManager.
-func SeedDataPlantilla(dbManager *connection.DBManager) {
+func SeedDataPlantilla(ctx context.Context, dbManager *connection.DBManager) {
 	// Leer datos del archivo JSON
 	plantillas, err := loadPlantillaFromJSON("seeds/data/plantillas.json")
 	if err != nil {
-		log.Fatalf("Error al cargar datos de plantilla desde el archivo JSON ❌: %v", err)
+		logs.LogError(
+			ctx,
+			"Error al leer datos de semilla desde el archivo JSON ❌: %v",
+			err,
+		)
 	}
 
 	// Insertar datos de semilla en la base de datos
 	for _, plantilla := range plantillas {
 		// Verificar que el ID de la plantilla no esté vacío
 		if plantilla.IDPlantilla == "" {
-			log.Println("El campo IDPlantilla está vacío. Saltando esta plantilla. ⚠️")
+			logs.LogError(
+				ctx,
+				"El ID de la plantilla no puede estar vacío ❌: %v",
+				plantilla,
+			)
 			continue
 		}
 
@@ -28,20 +36,22 @@ func SeedDataPlantilla(dbManager *connection.DBManager) {
 		var existingPlantilla models.Plantilla
 		if err := dbManager.DB.Where(
 			"id_plantilla = ?", plantilla.IDPlantilla).First(&existingPlantilla).Error; err == nil {
-			log.Printf("La plantilla con ID %s ya existe en la base de datos. ⚠️", plantilla.IDPlantilla)
 			continue // Saltar si ya existe
 		}
 
 		// Insertar la plantilla en la base de datos
 		if err := dbManager.DB.Create(&plantilla).Error; err != nil {
-			log.Fatalf("Error al insertar datos de semilla en la base de datos ❌: %v", err)
+			logs.LogError(
+				ctx,
+				"Error al insertar plantilla en la base de datos ❌: %v",
+				err,
+			)
 		} else {
-			log.Printf(
-				"Plantilla con ID %s insertada correctamente en la base de datos. ✅", plantilla.IDPlantilla)
+			logs.LogPlantillaInsertada(ctx, plantilla.IDPlantilla)
 		}
+		logs.LogDatosSemillaPlantillaInsertados(ctx)
 	}
 
-	log.Println("Datos de semilla insertados correctamente en la base de datos 🌱")
 }
 
 // loadPlantillaFromJSON carga los datos de plantilla desde un archivo JSON

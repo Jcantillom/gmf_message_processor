@@ -1,9 +1,11 @@
 package config
 
 import (
+	"gmf_message_processor/internal/logs"
+	"log"
+
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
-	"log"
 )
 
 // Manager ConfigManager maneja la carga de configuración de la aplicación.
@@ -18,16 +20,38 @@ func NewConfigManager() *Manager {
 func (cm *Manager) InitConfig() {
 	// Cargar el archivo .env si existe
 	if err := godotenv.Load(); err != nil {
-		log.Printf("No .env file found, relying on environment variables.")
+		logs.LogArchivoEnvNoEncontrado()
 	}
 
-	viper.SetEnvPrefix("app")
+	// Configurar Viper para usar el prefijo "APP" y cargar variables automáticamente del entorno
+	viper.SetEnvPrefix("APP")
 	viper.AutomaticEnv()
 
-	// Valores predeterminados
-	viper.SetDefault("DB_HOST", "localhost")
-	viper.SetDefault("DB_PORT", "5433")
-	viper.SetDefault("DB_USER", "postgres")
-	viper.SetDefault("DB_PASSWORD", "postgres")
-	viper.SetDefault("DB_NAME", "gmfdb")
+	// Especificar el archivo .env y cargarlo con Viper
+	viper.SetConfigFile(".env")
+	viper.SetConfigType("env")
+
+	// Leer las configuraciones del archivo .env
+	if err := viper.ReadInConfig(); err != nil {
+		log.Printf("Error al leer el archivo de configuración: %v", err)
+	}
+
+	// Enlazar variables de entorno con Viper
+	viper.BindEnv("DB_HOST")
+	viper.BindEnv("DB_PORT")
+	viper.BindEnv("DB_USER")
+	viper.BindEnv("DB_PASSWORD")
+	viper.BindEnv("DB_NAME")
+	viper.BindEnv("SMTP_SERVER")
+	viper.BindEnv("SMTP_PORT")
+	viper.BindEnv("SMTP_USER")
+	viper.BindEnv("SMTP_PASSWORD")
+	viper.BindEnv("SQS_QUEUE_URL")
+
+}
+
+func setDefault(key, value string) {
+	if !viper.IsSet(key) {
+		viper.SetDefault(key, value)
+	}
 }

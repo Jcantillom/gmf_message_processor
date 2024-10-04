@@ -1,17 +1,17 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
-	"log"
 )
 
-// ValidateSQSMessage valida la estructura del mensaje JSON y verifica los campos obligatorios.
 func ValidateSQSMessage(body string) (*models.SQSMessage, error) {
 	var msg models.SQSMessage
 
-	// Deserialización del mensaje JSON
+	// Deserialization del mensaje JSON
 	if err := json.Unmarshal([]byte(body), &msg); err != nil {
 		return nil, errors.New("invalid JSON format")
 	}
@@ -20,8 +20,9 @@ func ValidateSQSMessage(body string) (*models.SQSMessage, error) {
 	if msg.IDPlantilla == "" {
 		return nil, errors.New("IdPlantilla is required")
 	}
+	ctx := context.TODO()
 
-	log.Println("Formato de mensaje válido 😉")
+	logs.LogFormatoMensajeValido(ctx)
 
 	return &msg, nil
 }

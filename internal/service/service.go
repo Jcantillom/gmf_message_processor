@@ -3,12 +3,16 @@ package service
 import (
 	"context"
 	"errors"
-	"gmf_message_processor/internal/email"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
 	"gmf_message_processor/internal/utils"
-	"log"
 )
 
+type IPlantillaService interface {
+	HandlePlantilla(ctx context.Context, msg *models.SQSMessage) error
+}
+
+// EmailService define la interfaz para el servicio de correo electrónico.
 type EmailService interface {
 	SendEmail(remitente, destinatarios, asunto, cuerpo string) error
 }
@@ -32,21 +36,26 @@ func NewPlantillaService(repo PlantillaRepository, emailService EmailService) *P
 	}
 }
 
-// HandlePlantilla maneja la lógica de negocio para la plantilla.
 func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSMessage) error {
 	// Verificar si la plantilla existe en la base de datos
 	exists, plantilla, err := s.repo.CheckPlantillaExists(msg.IDPlantilla)
 	if err != nil {
+		logs.LogError(
+			ctx,
+			"Error al verificar si la plantilla con ID %s existe en la base de datos: %v",
+			msg.IDPlantilla,
+			err,
+		)
 		return err
 	}
 	if !exists {
-		log.Printf("La plantilla con ID %s no existe.", msg.IDPlantilla)
+		logs.LogPlantillaNoEncontrada(ctx, msg.IDPlantilla)
 		return errors.New("la plantilla no existe en la base de datos")
 	}
 
 	// Verificar que haya al menos un conjunto de parámetros en el array
 	if len(msg.Parametro) == 0 {
-		log.Printf("No se proporcionaron parámetros para la plantilla con ID %s.", msg.IDPlantilla)
+		logs.LogParametrosNoProporcionados(ctx, msg.IDPlantilla)
 		return errors.New("no se proporcionaron parámetros para la plantilla")
 	}
 
@@ -67,14 +76,14 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 	// Reemplazar los placeholders en el cuerpo de la plantilla
 	plantilla.Cuerpo = utils.ReplacePlaceholders(plantilla.Cuerpo, placeholders)
 
-	// Si la plantilla existe, enviar el correo electrónico
-	log.Printf("Plantilla con ID %s encontrada. Enviando correo electrónico...", msg.IDPlantilla)
-	err = email.SendEmail(plantilla.Remitente, plantilla.Destinatario, plantilla.Asunto, plantilla.Cuerpo)
+	// Si la plantilla existe, enviar el correo electrónico usando el servicio de correo
+	logs.LogPlantillaEncontrada(ctx, msg.IDPlantilla)
+	err = s.emailService.SendEmail(plantilla.Remitente, plantilla.Destinatario, plantilla.Asunto, plantilla.Cuerpo)
 	if err != nil {
-		log.Printf("Error enviando el correo para la plantilla con ID %s: %v", msg.IDPlantilla, err)
+		logs.LogErrorEnvioCorreo(ctx, msg.IDPlantilla, err)
 		return err
 	}
 
-	log.Printf("Correo electrónico enviado exitosamente para IDPlantilla: %s", msg.IDPlantilla)
+	logs.LogCorreoEnviado(ctx, msg.IDPlantilla)
 	return nil
 }

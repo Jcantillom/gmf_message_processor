@@ -2,6 +2,7 @@ package connection
 
 import (
 	"fmt"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
 	"log"
 	"os"
@@ -11,6 +12,13 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// DBManagerInterface define los métodos que debe implementar un DBManager.
+type DBManagerInterface interface {
+	InitDB() error
+	CloseDB()
+	GetDB() *gorm.DB
+}
 
 // DBManager maneja la conexión y migración de la base de datos.
 type DBManager struct {
@@ -24,17 +32,24 @@ func NewDBManager() *DBManager {
 
 // InitDB inicializa la conexión a la base de datos y realiza migraciones.
 func (dbm *DBManager) InitDB() error {
+	// Obtener el secreto
+	secretName := os.Getenv("SECRET_NAME") // Nombre del secreto en AWS
+	secretData, err := getSecret(secretName)
+	if err != nil {
+		return fmt.Errorf("error al obtener el secreto: %w", err)
+	}
+
 	// Construir el Data Source Name (DSN)
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
+		secretData.Username,
+		secretData.Password,
 		os.Getenv("DB_NAME"),
 	)
 
-	// Configurar el logger de GORM
+	// Configurar el logs de GORM
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
@@ -46,35 +61,39 @@ func (dbm *DBManager) InitDB() error {
 	)
 
 	// Abrir la conexión a la base de datos usando GORM
-	var err error
 	dbm.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: newLogger, // Usar el logger configurado
+		Logger: newLogger, // Usar el logs configurado
 	})
 	if err != nil {
 		return fmt.Errorf("error al abrir la conexión a la base de datos: %w", err)
 	}
 
-	log.Println("Conexión a la base de datos establecida correctamente 🐘")
+	logs.LogConexionBaseDatosEstablecida()
 
 	// Migrar la base de datos
 	if err := dbm.DB.AutoMigrate(&models.Plantilla{}); err != nil {
-		return fmt.Errorf("error al migrar la tabla Plantilla: %w", err)
+		return logs.LogErrorMigracionTablaPlantilla(err)
 	}
-	log.Println("Migración de la tabla Plantilla completada. 🚀")
+	logs.LogMigracionTablaPlantillaCompletada()
 
 	return nil
+}
+
+// GetDB obtiene la conexión a la base de datos.
+func (dbm *DBManager) GetDB() *gorm.DB {
+	return dbm.DB
 }
 
 // CloseDB cierra la conexión a la base de datos.
 func (dbm *DBManager) CloseDB() {
 	sqlDB, err := dbm.DB.DB()
 	if err != nil {
-		log.Printf("Error obteniendo la instancia SQL DB de GORM: %v", err)
+		logs.LogErrorConexionBaseDatos(err)
 		return
 	}
 	if err := sqlDB.Close(); err != nil {
-		log.Printf("Error al cerrar la conexión a la base de datos: %v", err)
+		logs.LogErrorCerrandoConexionBaseDatos(err)
 	} else {
-		log.Println("Conexión a la base de datos cerrada.")
+		logs.LogConexionBaseDatosCerrada()
 	}
 }

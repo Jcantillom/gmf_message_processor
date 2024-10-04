@@ -2,25 +2,36 @@ package handler
 
 import (
 	"context"
-	"github.com/stretchr/testify/mock"
-	"gmf_message_processor/internal/models"
-	"gmf_message_processor/internal/service"
-	"gmf_message_processor/internal/utils"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/joho/godotenv"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	awsinternal "gmf_message_processor/internal/aws"
+	"gmf_message_processor/internal/models"
+	"gmf_message_processor/internal/service"
 )
 
-type ProcessSQSMessagesTest struct {
-	name             string
-	ctx              context.Context
-	plantillaService *service.PlantillaService
-	wantProcessed    int
-	wantErr          error
+// MockSQSClient is a mock for the SQS client.
+type MockSQSClient struct {
+	mock.Mock
 }
 
+func (m *MockSQSClient) ReceiveMessage(
+	ctx context.Context, input *sqs.ReceiveMessageInput, opts ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*sqs.ReceiveMessageOutput), args.Error(1)
+}
+
+func (m *MockSQSClient) DeleteMessage(
+	ctx context.Context, input *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*sqs.DeleteMessageOutput), args.Error(1)
+}
+
+// MockPlantillaRepository is a mock for the Plantilla repository.
 type MockPlantillaRepository struct {
 	mock.Mock
 }
@@ -30,85 +41,328 @@ func (m *MockPlantillaRepository) CheckPlantillaExists(idPlantilla string) (bool
 	return args.Bool(0), args.Get(1).(*models.Plantilla), args.Error(2)
 }
 
-func (test *ProcessSQSMessagesTest) Run(t *testing.T) {
-	t.Helper()
-
-	// Obtener el directorio de trabajo actual
-	workingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Error obteniendo el directorio de trabajo: %v", err)
-	}
-
-	// Construir la ruta absoluta al archivo .env
-	envPath := filepath.Join(workingDir, "../../.env")
-
-	// Cargar archivo .env
-	err = godotenv.Load(envPath)
-	if err != nil {
-		t.Fatalf("Error al cargar el archivo .env: %v", err)
-	}
-
-	// Leer el evento SQS desde el archivo JSON usando la función ReadSQSEventFromFile de utils.
-	sqsEvent, err := utils.ReadSQSEventFromFile("../../test_data/message.json")
-	if err != nil {
-		t.Errorf("Error al leer el evento SQS: %v", err)
-		return
-	}
-
-	processed := 0 // Contador de mensajes procesados
-
-	// Procesar cada mensaje en el evento
-	for _, message := range sqsEvent.Records {
-		// Validar el mensaje
-		validMsg, err := utils.ValidateSQSMessage(message.Body)
-		if err != nil {
-			t.Errorf("Error validando el mensaje ❌: %v", err)
-			continue
-		}
-
-		// Llamar al servicio para manejar la lógica de negocio
-		if err := test.plantillaService.HandlePlantilla(test.ctx, validMsg); err != nil {
-			t.Errorf("Error al procesar el mensaje para IDPlantilla: %s: %v", validMsg.IDPlantilla, err)
-			return
-		} else {
-			t.Logf("Mensaje procesado con éxito para IDPlantilla ✅: %s", validMsg.IDPlantilla)
-			processed++ // Incrementar el contador de mensajes procesados
-		}
-	}
-
-	if processed != test.wantProcessed {
-		t.Errorf("Procesados = %d, want %d", processed, test.wantProcessed)
-	}
+// MockEmailService is a mock for the Email service.
+type MockEmailService struct {
+	mock.Mock
 }
 
-func TestProcessSQSMessages(t *testing.T) {
-	// Crear instancia del mock del repositorio
-	repo := new(MockPlantillaRepository)
+func (m *MockEmailService) SendEmail(remitente, destinatarios, asunto, cuerpo string) error {
+	args := m.Called(remitente, destinatarios, asunto, cuerpo)
+	return args.Error(0)
+}
 
-	// Mockear la respuesta del repositorio
-	repo.On("CheckPlantillaExists", "PC001").Return(true, &models.Plantilla{
+func TestProcessMessage_Success(t *testing.T) {
+	mockRepo := new(MockPlantillaRepository)
+	mockEmailService := new(MockEmailService)
+	mockSQSClient := new(MockSQSClient)
+
+	plantillaService := service.NewPlantillaService(mockRepo, mockEmailService)
+
+	// Mock the SQSClient's ReceiveMessage and DeleteMessage methods
+	mockSQSClient.On("ReceiveMessage", mock.Anything, mock.AnythingOfType("*sqs.ReceiveMessageInput")).
+		Return(&sqs.ReceiveMessageOutput{
+			Messages: []types.Message{
+				{
+					Body: aws.String(`{
+						"Records": [
+							{
+								"body": "{\"IdPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\"}]}"
+							}
+						]
+					}`),
+					ReceiptHandle: aws.String("test-receipt-handle"),
+				},
+			},
+		}, nil)
+
+	mockSQSClient.On("DeleteMessage", mock.Anything, mock.AnythingOfType("*sqs.DeleteMessageInput")).
+		Return(&sqs.DeleteMessageOutput{}, nil)
+
+	sqsClient := &awsinternal.SQSClient{
+		Client:   mockSQSClient,
+		QueueURL: "queue-url",
+	}
+
+	sqsHandler := NewSQSHandler(plantillaService, sqsClient)
+
+	// Mock CheckPlantillaExists
+	mockRepo.On(
+		"CheckPlantillaExists",
+		"PC001").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC001",
+		Remitente:    "remitente@example.com",
+		Destinatario: "destinatario@example.com",
 		Asunto:       "Asunto de prueba",
-		Cuerpo:       "Cuerpo con &nombre_archivo",
-		Remitente:    "test@example.com",
-		Destinatario: "dest@example.com",
-		Adjunto:      false,
+		Cuerpo:       "Hola, &nombre_archivo.",
 	}, nil)
 
-	// Crear instancia del servicio con el mock
-	plantillaService := service.NewPlantillaService(repo, nil)
+	// Parameters to be replaced
+	expectedCuerpo := "Hola, archivo1.txt."
 
-	tests := []ProcessSQSMessagesTest{
-		{
-			name:             "Procesar mensajes SQS",
-			ctx:              context.Background(),
-			plantillaService: plantillaService, // Usar el servicio inicializado
-			wantProcessed:    1,
-			wantErr:          nil,
-		},
+	// Mock SendEmail
+	mockEmailService.On(
+		"SendEmail",
+		"remitente@example.com",
+		"destinatario@example.com",
+		"Asunto de prueba",
+		expectedCuerpo,
+	).Return(nil)
+
+	// Call the handler to process the message
+	err := sqsHandler.ProcessMessage(context.Background())
+
+	// Verify that no error occurred
+	assert.NoError(t, err)
+
+	// Verify that the mocked methods were called with the expected values
+	mockRepo.AssertCalled(t, "CheckPlantillaExists", "PC001")
+	mockEmailService.AssertCalled(t,
+		"SendEmail",
+		"remitente@example.com",
+		"destinatario@example.com",
+		"Asunto de prueba",
+		expectedCuerpo,
+	)
+	mockSQSClient.AssertCalled(t, "DeleteMessage", mock.Anything, mock.AnythingOfType("*sqs.DeleteMessageInput"))
+}
+
+func TestProcessMessage_NoMessages(t *testing.T) {
+	mockRepo := new(MockPlantillaRepository)
+	mockEmailService := new(MockEmailService)
+	mockSQSClient := new(MockSQSClient)
+
+	plantillaService := service.NewPlantillaService(mockRepo, mockEmailService)
+
+	// Mock the SQSClient's ReceiveMessage method with no messages
+	mockSQSClient.On("ReceiveMessage", mock.Anything, mock.AnythingOfType("*sqs.ReceiveMessageInput")).
+		Return(&sqs.ReceiveMessageOutput{
+			Messages: []types.Message{},
+		}, nil)
+
+	sqsClient := &awsinternal.SQSClient{
+		Client:   mockSQSClient,
+		QueueURL: "queue-url",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, tt.Run)
+	sqsHandler := NewSQSHandler(plantillaService, sqsClient)
+
+	// Execute the handler with no messages
+	err := sqsHandler.ProcessMessage(context.Background())
+
+	// Verify that no error occurred
+	assert.NoError(t, err)
+
+	// Verify that the repository or email service methods were not called
+	mockRepo.AssertNotCalled(t, "CheckPlantillaExists")
+	mockEmailService.AssertNotCalled(t, "SendEmail")
+	mockSQSClient.AssertNotCalled(t, "DeleteMessage")
+}
+
+func TestProcessMessage_InvalidMessage(t *testing.T) {
+	mockRepo := new(MockPlantillaRepository)
+	mockEmailService := new(MockEmailService)
+	mockSQSClient := new(MockSQSClient)
+
+	plantillaService := service.NewPlantillaService(mockRepo, mockEmailService)
+
+	// Mock the SQSClient's ReceiveMessage method with an invalid message
+	mockSQSClient.On("ReceiveMessage", mock.Anything, mock.AnythingOfType("*sqs.ReceiveMessageInput")).
+		Return(&sqs.ReceiveMessageOutput{
+			Messages: []types.Message{
+				{
+					Body:          aws.String(`{Invalid JSON}`),
+					ReceiptHandle: aws.String("test-receipt-handle"),
+				},
+			},
+		}, nil)
+
+	sqsClient := &awsinternal.SQSClient{
+		Client:   mockSQSClient,
+		QueueURL: "queue-url",
 	}
+
+	sqsHandler := NewSQSHandler(plantillaService, sqsClient)
+
+	// Call the handler to process the message
+	err := sqsHandler.ProcessMessage(context.Background())
+
+	// Verify that an error was received
+	assert.Error(t, err)
+
+	// Verify that the repository or email service methods were not called
+	mockRepo.AssertNotCalled(t, "CheckPlantillaExists")
+	mockEmailService.AssertNotCalled(t, "SendEmail")
+	mockSQSClient.AssertNotCalled(t, "DeleteMessage")
+}
+
+func TestProcessMessage_ReceiveMessageError(t *testing.T) {
+	mockRepo := new(MockPlantillaRepository)
+	mockEmailService := new(MockEmailService)
+	mockSQSClient := new(MockSQSClient)
+
+	plantillaService := service.NewPlantillaService(mockRepo, mockEmailService)
+
+	// Mock the SQSClient's ReceiveMessage method to return an error
+	mockSQSClient.On("ReceiveMessage", mock.Anything, mock.AnythingOfType("*sqs.ReceiveMessageInput")).
+		Return((*sqs.ReceiveMessageOutput)(nil), assert.AnError) // Devolver explicitamente nil y un error
+
+	sqsClient := &awsinternal.SQSClient{
+		Client:   mockSQSClient,
+		QueueURL: "queue-url",
+	}
+
+	sqsHandler := NewSQSHandler(plantillaService, sqsClient)
+
+	// Call the handler to process the message
+	err := sqsHandler.ProcessMessage(context.Background())
+
+	// Verify that an error occurred
+	assert.Error(t, err)
+
+	// Verify that the repository or email service methods were not called
+	mockRepo.AssertNotCalled(t, "CheckPlantillaExists")
+	mockEmailService.AssertNotCalled(t, "SendEmail")
+	mockSQSClient.AssertNotCalled(t, "DeleteMessage")
+}
+
+func TestProcessMessage_DeleteMessageError(t *testing.T) {
+	mockRepo := new(MockPlantillaRepository)
+	mockEmailService := new(MockEmailService)
+	mockSQSClient := new(MockSQSClient)
+
+	plantillaService := service.NewPlantillaService(mockRepo, mockEmailService)
+
+	// Mock the SQSClient's ReceiveMessage method
+	mockSQSClient.On("ReceiveMessage", mock.Anything, mock.AnythingOfType("*sqs.ReceiveMessageInput")).
+		Return(&sqs.ReceiveMessageOutput{
+			Messages: []types.Message{
+				{
+					Body: aws.String(`{
+						"Records": [
+							{
+								"body": "{\"IdPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\"}]}"
+							}
+						]
+					}`),
+					ReceiptHandle: aws.String("test-receipt-handle"),
+				},
+			},
+		}, nil)
+
+	// Mock CheckPlantillaExists
+	mockRepo.On(
+		"CheckPlantillaExists",
+		"PC001").Return(true, &models.Plantilla{
+		IDPlantilla:  "PC001",
+		Remitente:    "remitente@example.com",
+		Destinatario: "destinatario@example.com",
+		Asunto:       "Asunto de prueba",
+		Cuerpo:       "Hola, &nombre_archivo.",
+	}, nil)
+
+	// Mock SendEmail
+	mockEmailService.On(
+		"SendEmail",
+		"remitente@example.com",
+		"destinatario@example.com",
+		"Asunto de prueba",
+		"Hola, archivo1.txt.",
+	).Return(nil)
+
+	// Mock DeleteMessage to return an empty *sqs.DeleteMessageOutput and an error
+	mockSQSClient.On("DeleteMessage", mock.Anything, mock.AnythingOfType("*sqs.DeleteMessageInput")).
+		Return(&sqs.DeleteMessageOutput{}, assert.AnError) // Aquí devolvemos un objeto vacío y un error
+
+	sqsClient := &awsinternal.SQSClient{
+		Client:   mockSQSClient,
+		QueueURL: "queue-url",
+	}
+
+	sqsHandler := NewSQSHandler(plantillaService, sqsClient)
+
+	// Call the handler to process the message
+	err := sqsHandler.ProcessMessage(context.Background())
+
+	// Verify that an error occurred
+	assert.Error(t, err)
+
+	// Verify that the mocked methods were called with the expected values
+	mockRepo.AssertCalled(t, "CheckPlantillaExists", "PC001")
+	mockEmailService.AssertCalled(t,
+		"SendEmail",
+		"remitente@example.com",
+		"destinatario@example.com",
+		"Asunto de prueba",
+		"Hola, archivo1.txt.",
+	)
+	mockSQSClient.AssertCalled(t, "DeleteMessage", mock.Anything, mock.AnythingOfType("*sqs.DeleteMessageInput"))
+}
+
+func TestProcessMessage_HandlePlantillaError(t *testing.T) {
+	mockRepo := new(MockPlantillaRepository)
+	mockEmailService := new(MockEmailService)
+	mockSQSClient := new(MockSQSClient)
+
+	plantillaService := service.NewPlantillaService(mockRepo, mockEmailService)
+
+	// Mock the SQSClient's ReceiveMessage method
+	mockSQSClient.On("ReceiveMessage", mock.Anything, mock.AnythingOfType("*sqs.ReceiveMessageInput")).
+		Return(&sqs.ReceiveMessageOutput{
+			Messages: []types.Message{
+				{
+					Body: aws.String(`{
+						"Records": [
+							{
+								"body": "{\"IdPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\"}]}"
+							}
+						]
+					}`),
+					ReceiptHandle: aws.String("test-receipt-handle"),
+				},
+			},
+		}, nil)
+
+	// Mock CheckPlantillaExists
+	mockRepo.On(
+		"CheckPlantillaExists",
+		"PC001").Return(true, &models.Plantilla{
+		IDPlantilla:  "PC001",
+		Remitente:    "remitente@example.com",
+		Destinatario: "destinatario@example.com",
+		Asunto:       "Asunto de prueba",
+		Cuerpo:       "Hola, &nombre_archivo.",
+	}, nil)
+
+	// Mock SendEmail to return an error
+	mockEmailService.On(
+		"SendEmail",
+		"remitente@example.com",
+		"destinatario@example.com",
+		"Asunto de prueba",
+		"Hola, archivo1.txt.",
+	).Return(assert.AnError)
+
+	sqsClient := &awsinternal.SQSClient{
+		Client:   mockSQSClient,
+		QueueURL: "queue-url",
+	}
+
+	sqsHandler := NewSQSHandler(plantillaService, sqsClient)
+
+	// Call the handler to process the message
+	err := sqsHandler.ProcessMessage(context.Background())
+
+	// Verify that an error occurred
+	assert.Error(t, err)
+
+	// Verify that the mocked methods were called with the expected values
+	mockRepo.AssertCalled(t, "CheckPlantillaExists", "PC001")
+	mockEmailService.AssertCalled(t,
+		"SendEmail",
+		"remitente@example.com",
+		"destinatario@example.com",
+		"Asunto de prueba",
+		"Hola, archivo1.txt.",
+	)
+	mockSQSClient.AssertNotCalled(t, "DeleteMessage")
 }

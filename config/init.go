@@ -1,13 +1,19 @@
 package config
 
 import (
+	"context"
 	"gmf_message_processor/connection"
+	"gmf_message_processor/internal/email"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/repository"
 	"gmf_message_processor/internal/service"
+	"gmf_message_processor/seeds"
 	"log"
 )
 
-// InitApplication inicializa la configuración, la conexión a la base de datos y crea las instancias de servicios necesarias.
+var ctx = context.TODO()
+
+// Inicializa la configuración, la conexión a la base de datos y crea las instancias de servicios necesarias.
 func InitApplication() (*service.PlantillaService, *connection.DBManager) {
 	// Inicializar el ConfigManager y cargar configuración
 	configManager := NewConfigManager()
@@ -20,17 +26,24 @@ func InitApplication() (*service.PlantillaService, *connection.DBManager) {
 	}
 
 	// Inicializar el repositorio GORM con la conexión a la base de datos
-	repo := repository.NewGormPlantillaRepository(dbManager.DB)
+	repo := repository.NewPlantillaRepository(dbManager.DB)
 
-	// Crear una instancia del servicio PlantillaService
-	plantillaService := service.NewPlantillaService(repo, nil)
+	// Crear una instancia del servicio de correo electrónico utilizando SMTP
+	emailService := email.NewSMTPEmailService()
+
+	// Crear una instancia del servicio PlantillaService con el servicio de correo electrónico
+	plantillaService := service.NewPlantillaService(repo, emailService)
+
+	// Insertar datos de semilla en la base de datos
+	seeds.SeedDataPlantilla(nil, dbManager)
 
 	return plantillaService, dbManager
 }
 
-// CleanupApplication maneja la limpieza de recursos, como cerrar conexiones a la base de datos.
-func CleanupApplication(dbManager *connection.DBManager) {
+// maneja la limpieza de recursos, como cerrar conexiones a la base de datos.
+func CleanupApplication(dbManager connection.DBManagerInterface) {
 	// Cerrar la conexión a la base de datos
 	dbManager.CloseDB()
-	log.Println("Recursos limpiados correctamente 🧹")
+	logs.LogInfo(ctx, "Recursos limpiados correctamente 🧹 ", nil)
+
 }

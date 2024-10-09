@@ -45,66 +45,7 @@ desarrollo en Go.
 
 El proyecto sigue una estructura modular clara y organizada:
 
-    ```plaintext
-
-├── bootstrap
-├── cmd
-│ └── lambda
-│ └── main.go
-├── config
-│ ├── config.go
-│ ├── config_manager_test.go
-│ └── init.go
-├── connection
-│ ├── db_manager.go
-│ ├── db_manager_test.go
-│ └── get_secret.go
-├── coverage.html
-├── coverage.out
-├── function.zip
-├── go.mod
-├── go.sum
-├── internal
-│ ├── aws
-│ │ ├── sqs_client.go
-│ │ └── sqs_client_test.go
-│ ├── email
-│ │ ├── ses.go
-│ │ ├── smtp.go
-│ │ └── smtp_test.go
-│ ├── handler
-│ │ ├── handler_test.go
-│ │ └── sqs_handler.go
-│ ├── logs
-│ │ ├── logger.go
-│ │ └── logger_test.go
-│ ├── models
-│ │ ├── model_test.go
-│ │ ├── plantilla.go
-│ │ └── sqs_message.go
-│ ├── repository
-│ │ ├── repository.go
-│ │ └── repository_test.go
-│ ├── service
-│ │ ├── service.go
-│ │ └── service_test.go
-│ └── utils
-│ ├── sqs_helper.go
-│ ├── sqs_interface.go
-│ ├── text_replacer.go
-│ ├── utils_test.go
-│ └── validate_message.go
-├── README.md
-├── seeds
-│ ├── data
-│ │ └── plantillas.json
-│ └── load_data_plantilla.go
-├── sonar-project.properties
-└── test_data
-├── message.json
-└── no_messages.json
-
-    ```
+![img.png](img.png)
 
 ## Variables de Entorno
 

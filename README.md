@@ -44,7 +44,9 @@ desarrollo en Go.
 ## Estructura del Proyecto
 
 El proyecto sigue una estructura modular clara y organizada:
-.
+
+    ```plaintext
+
 ├── bootstrap
 ├── cmd
 │ └── lambda
@@ -102,7 +104,7 @@ El proyecto sigue una estructura modular clara y organizada:
 ├── message.json
 └── no_messages.json
 
-17 directories, 40 files
+    ```
 
 ## Variables de Entorno
 

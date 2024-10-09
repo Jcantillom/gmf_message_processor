@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
 	"gmf_message_processor/internal/utils"
@@ -41,49 +42,60 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 	exists, plantilla, err := s.repo.CheckPlantillaExists(msg.IDPlantilla)
 	if err != nil {
 		logs.LogError(
-			ctx,
 			"Error al verificar si la plantilla con ID %s existe en la base de datos: %v",
-			msg.IDPlantilla,
 			err,
 		)
 		return err
 	}
 	if !exists {
-		logs.LogPlantillaNoEncontrada(ctx, msg.IDPlantilla)
+		logs.LogError("La plantilla con ID %s no existe en la base de datos", fmt.Errorf(msg.IDPlantilla))
 		return errors.New("la plantilla no existe en la base de datos")
 	}
 
 	// Verificar que haya al menos un conjunto de parámetros en el array
 	if len(msg.Parametro) == 0 {
-		logs.LogParametrosNoProporcionados(ctx, msg.IDPlantilla)
-		return errors.New("no se proporcionaron parámetros para la plantilla")
+		logs.LogInfo(
+			"No se proporcionaron parámetros para la plantilla. Se utilizarán valores predeterminados.",
+		)
+
+		// Aquí puedes usar valores predeterminados o simplemente continuar sin los parámetros.
+		placeholders := map[string]string{}
+
+		// Reemplazar placeholders en el cuerpo de la plantilla
+		plantilla.Cuerpo = utils.ReplacePlaceholders(plantilla.Cuerpo, placeholders)
+
+		// Continuar con el envío de correo aunque no haya parámetros
+		err = s.emailService.SendEmail(plantilla.Remitente, plantilla.Destinatario, plantilla.Asunto, plantilla.Cuerpo)
+		if err != nil {
+			logs.LogError("Error al enviar el correo electrónico: %v", err)
+			return err
+		}
+
+		logs.LogInfo("Correo electrónico enviado sin parámetros")
+		return nil
 	}
 
-	// Usar el primer conjunto de parámetros
-	params := msg.Parametro[0]
-
-	// Mapear los parámetros a un mapa de strings
-	placeholders := map[string]string{
-		"nombre_archivo":      params.NombreArchivo,
-		"plataforma_origen":   params.PlataformaOrigen,
-		"fecha_recepcion":     params.FechaRecepcion,
-		"hora_recepcion":      params.HoraRecepcion,
-		"codigo_rechazo":      params.CodigoRechazo,
-		"descripcion_rechazo": params.DescripcionRechazo,
-		"detalle_rechazo":     params.DetalleRechazo,
+	// Iterar sobre todos los parámetros y mapear los valores
+	placeholders := map[string]string{}
+	for _, param := range msg.Parametro {
+		placeholders["&"+param.Nombre] = param.Valor
 	}
 
 	// Reemplazar los placeholders en el cuerpo de la plantilla
 	plantilla.Cuerpo = utils.ReplacePlaceholders(plantilla.Cuerpo, placeholders)
 
-	// Si la plantilla existe, enviar el correo electrónico usando el servicio de correo
-	logs.LogPlantillaEncontrada(ctx, msg.IDPlantilla)
-	err = s.emailService.SendEmail(plantilla.Remitente, plantilla.Destinatario, plantilla.Asunto, plantilla.Cuerpo)
+	// Enviar el correo electrónico usando el servicio de correo
+	err = s.emailService.SendEmail(
+		plantilla.Remitente,
+		plantilla.Destinatario,
+		plantilla.Asunto,
+		plantilla.Cuerpo,
+	)
 	if err != nil {
-		logs.LogErrorEnvioCorreo(ctx, msg.IDPlantilla, err)
+		logs.LogError("Error al enviar el correo electrónico: %v", err)
 		return err
 	}
 
-	logs.LogCorreoEnviado(ctx, msg.IDPlantilla)
+	logs.LogInfo("Correo electrónico enviado con éxito")
 	return nil
 }

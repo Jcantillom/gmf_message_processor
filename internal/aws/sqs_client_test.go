@@ -1,16 +1,16 @@
-package aws_test
+package aws
 
 import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/spf13/viper"
 	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/stretchr/testify/assert"
-	awsInternal "gmf_message_processor/internal/aws"
 )
 
 func defaultLoadConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
@@ -18,17 +18,22 @@ func defaultLoadConfig(ctx context.Context, optFns ...func(*config.LoadOptions) 
 }
 
 func TestNewSQSClient_ValidURL(t *testing.T) {
+	// Establecer la variable de entorno
 	os.Setenv("APP_ENV", "local")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
+	// Asegurarse de que Viper vuelva a cargar las variables de entorno
+	viper.AutomaticEnv()
+
+	// Ahora ejecuta la prueba
+	client, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "http://localhost:4566/000000000000/my-queue", client.QueueURL)
 }
 
 func TestNewSQSClient_InvalidURL(t *testing.T) {
-	_, err := awsInternal.NewSQSClient("invalid-url", defaultLoadConfig)
+	_, err := NewSQSClient("invalid-url", defaultLoadConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid queue URL")
 }
@@ -37,7 +42,7 @@ func TestNewSQSClient_UnknownAppEnv(t *testing.T) {
 	os.Setenv("APP_ENV", "unknown")
 	defer os.Unsetenv("APP_ENV")
 
-	_, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
+	_, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown APP_ENV")
 }
@@ -50,7 +55,7 @@ func TestNewSQSClient_LoadConfigError(t *testing.T) {
 		return aws.Config{}, fmt.Errorf("unable to load AWS SDK config")
 	}
 
-	_, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
+	_, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unable to load AWS SDK config")
 }
@@ -59,7 +64,7 @@ func TestNewSQSClient_ProdEnv(t *testing.T) {
 	os.Setenv("APP_ENV", "prod")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := awsInternal.NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", defaultLoadConfig)
+	client, err := NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", defaultLoadConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", client.QueueURL)
@@ -69,7 +74,7 @@ func TestNewSQSClient_LocalEnv(t *testing.T) {
 	os.Setenv("APP_ENV", "local")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
+	client, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "http://localhost:4566/000000000000/my-queue", client.QueueURL)
@@ -79,7 +84,7 @@ func TestNewSQSClient_QAEnv(t *testing.T) {
 	os.Setenv("APP_ENV", "qa")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := awsInternal.NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", defaultLoadConfig)
+	client, err := NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", defaultLoadConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", client.QueueURL)
@@ -90,7 +95,7 @@ func TestNewSQSClient_LocalStack_ValidEndpoint(t *testing.T) {
 	defer os.Unsetenv("APP_ENV")
 
 	// Crear un nuevo cliente SQS utilizando la función de carga de configuración predeterminada
-	client, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
+	client, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", defaultLoadConfig)
 
 	// Asegurarse de que no haya errores
 	assert.NoError(t, err)
@@ -103,7 +108,7 @@ func TestNewSQSClient_DevEnv(t *testing.T) {
 	defer os.Unsetenv("APP_ENV")
 
 	// Usar una URL válida
-	client, err := awsInternal.NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", defaultLoadConfig)
+	client, err := NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", defaultLoadConfig)
 
 	// Verificar que no hay error
 	assert.NoError(t, err)
@@ -125,7 +130,7 @@ func TestNewSQSClient_AWSInvalidService(t *testing.T) {
 	}
 
 	// Crear un nuevo cliente SQS
-	client, err := awsInternal.NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", mockLoadConfigFunc)
+	client, err := NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", mockLoadConfigFunc)
 
 	// Verificar que no hay error
 
@@ -156,7 +161,7 @@ func TestNewSQSClient_LocalStack_UnknownEndpoint(t *testing.T) {
 	}
 
 	// Crear un nuevo cliente SQS con una URL válida
-	client, err := awsInternal.NewSQSClient(
+	client, err := NewSQSClient(
 		"http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
 
 	// Verificar que no hay error
@@ -207,7 +212,7 @@ func TestNewSQSClient_EndpointResolver(t *testing.T) {
 	}
 
 	// Crear un nuevo cliente SQS
-	client, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
+	client, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
 
 	// Verificar que no hay error y el cliente es válido
 	assert.NoError(t, err)
@@ -249,8 +254,111 @@ func TestCase1(t *testing.T) {
 	os.Setenv("APP_ENV", "local")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := awsInternal.NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
+	client, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "http://localhost:4566/000000000000/my-queue", client.QueueURL)
+}
+func TestGetEndpointResolver_LocalEnv(t *testing.T) {
+	// Configurar el valor de APP_ENV como "local"
+	viper.Set("APP_ENV", "local")
+
+	resolver, err := getEndpointResolver()
+	if err != nil {
+		t.Fatalf("No se esperaba error al obtener el resolvedor de endpoints: %v", err)
+	}
+
+	// Probar el caso cuando el servicio es SQS y la región es us-east-1
+	endpoint, err := resolver.ResolveEndpoint(sqs.ServiceID, "us-east-1")
+	if err != nil {
+		t.Fatalf("No se esperaba error al resolver el endpoint: %v", err)
+	}
+
+	expectedURL := "http://localhost:4566"
+	if endpoint.URL != expectedURL {
+		t.Errorf("Se esperaba el URL del endpoint: %s, pero se obtuvo: %s", expectedURL, endpoint.URL)
+	}
+
+	expectedRegion := "us-east-1"
+	if endpoint.SigningRegion != expectedRegion {
+		t.Errorf("Se esperaba la región de firma: %s, pero se obtuvo: %s", expectedRegion, endpoint.SigningRegion)
+	}
+}
+
+func TestGetEndpointResolver_UnknownService(t *testing.T) {
+	// Configurar el valor de APP_ENV como "local"
+	viper.Set("APP_ENV", "local")
+
+	resolver, err := getEndpointResolver()
+	if err != nil {
+		t.Fatalf("No se esperaba error al obtener el resolvedor de endpoints: %v", err)
+	}
+
+	// Probar el caso cuando el servicio es desconocido
+	_, err = resolver.ResolveEndpoint("unknown_service", "us-east-1")
+	if err == nil {
+		t.Error("Se esperaba un error para un servicio desconocido, pero no se obtuvo ningún error")
+	}
+
+	expectedErr := "unknown endpoint requested"
+	if err.Error() != expectedErr {
+		t.Errorf("Se esperaba el error: %s, pero se obtuvo: %s", expectedErr, err.Error())
+	}
+}
+
+func TestGetEndpointResolver_UnknownRegion(t *testing.T) {
+	// Configurar el valor de APP_ENV como "local"
+	viper.Set("APP_ENV", "local")
+
+	resolver, err := getEndpointResolver()
+	if err != nil {
+		t.Fatalf("No se esperaba error al obtener el resolvedor de endpoints: %v", err)
+	}
+
+	// Probar el caso cuando la región es desconocida
+	_, err = resolver.ResolveEndpoint(sqs.ServiceID, "unknown-region")
+	if err == nil {
+		t.Error("Se esperaba un error para una región desconocida, pero no se obtuvo ningún error")
+	}
+
+	expectedErr := "unknown endpoint requested"
+	if err.Error() != expectedErr {
+		t.Errorf("Se esperaba el error: %s, pero se obtuvo: %s", expectedErr, err.Error())
+	}
+}
+
+func TestGetEndpointResolver_UnknownAppEnv(t *testing.T) {
+	// Configurar el valor de APP_ENV como "desconocido"
+	viper.Set("APP_ENV", "unknown")
+
+	_, err := getEndpointResolver()
+	if err == nil {
+		t.Fatal("Se esperaba un error para un APP_ENV desconocido, pero no se obtuvo ningún error")
+	}
+
+	expectedErr := "unknown APP_ENV: unknown"
+	if err.Error() != expectedErr {
+		t.Errorf("Se esperaba el error: %s, pero se obtuvo: %s", expectedErr, err.Error())
+	}
+}
+
+func TestGetEndpointResolver_EndpointNotFoundError(t *testing.T) {
+	// Configurar el valor de APP_ENV como "dev"
+	viper.Set("APP_ENV", "dev")
+
+	resolver, err := getEndpointResolver()
+	if err != nil {
+		t.Fatalf("No se esperaba error al obtener el resolvedor de endpoints: %v", err)
+	}
+
+	// Probar el caso cuando se devuelve aws.EndpointNotFoundError
+	_, err = resolver.ResolveEndpoint(sqs.ServiceID, "us-east-1")
+	if err == nil {
+		t.Error("Se esperaba un error aws.EndpointNotFoundError, pero no se obtuvo ningún error")
+	}
+
+	// Verificar que el error sea de tipo aws.EndpointNotFoundError
+	if _, ok := err.(*aws.EndpointNotFoundError); !ok {
+		t.Errorf("Se esperaba un error de tipo aws.EndpointNotFoundError, pero se obtuvo: %T", err)
+	}
 }

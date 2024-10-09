@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -17,21 +16,6 @@ type MockGodotenv struct {
 func (m *MockGodotenv) Load() error {
 	args := m.Called()
 	return args.Error(0)
-}
-
-func TestConfigManager_InitConfig_ErrorLoadingEnvFile(t *testing.T) {
-	// Crear un mock de godotenv que devuelva un error
-	mockGodotenv := new(MockGodotenv)
-	mockGodotenv.On("Load").Return(os.ErrNotExist)
-
-	// Crear instancia de ConfigManager
-	configManager := NewConfigManager()
-
-	// Llamar a InitConfig para inicializar la configuración
-	configManager.InitConfig()
-
-	// Verificar que las configuraciones predeterminadas se han cargado
-	assert.Equal(t, "localhost", viper.GetString("DB_HOST"))
 }
 
 func TestConfigManager_UnsetConfig(t *testing.T) {

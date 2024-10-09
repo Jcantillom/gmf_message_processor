@@ -29,6 +29,7 @@ func (m *MockEmailService) SendEmail(remitente, destinatarios, asunto, cuerpo st
 }
 
 func TestHandlePlantilla_InvalidParameters(t *testing.T) {
+	// Mock del repositorio para que devuelva una plantilla válida
 	repo := new(MockPlantillaRepository)
 	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
@@ -39,16 +40,29 @@ func TestHandlePlantilla_InvalidParameters(t *testing.T) {
 		Adjunto:      false,
 	}, nil)
 
-	service := NewPlantillaService(repo, nil)
+	// Mock del servicio de correo para evitar el panic
+	emailService := new(MockEmailService)
+	emailService.On(
+		"SendEmail",
+		"test@example.com",
+		"dest@example.com", "Asunto de prueba",
+		"Cuerpo de prueba").Return(nil)
 
+	// Crear una instancia del servicio con los mocks del repositorio y del servicio de correo
+	service := NewPlantillaService(repo, emailService)
+
+	// Llamar a HandlePlantilla con un mensaje que no tiene parámetros
 	err := service.HandlePlantilla(context.TODO(), &models.SQSMessage{
 		IDPlantilla: "PC003",
 		Parametro:   []models.ParametrosSQS{}, // Parámetros vacíos
 	})
 
-	assert.Error(t, err, "Debería haber un error cuando no se proporcionan parámetros")
-	assert.Equal(t, "no se proporcionaron parámetros para la plantilla", err.Error())
+	// Verificar que no haya error y se maneje correctamente el caso de parámetros vacíos
+	assert.NoError(t, err, "No debería haber un error cuando no se proporcionan parámetros")
+
+	// Verificar que el repositorio y el servicio de correo fueron invocados correctamente
 	repo.AssertExpectations(t)
+	emailService.AssertExpectations(t)
 }
 
 func TestHandlePlantilla_PlantillaNotFound(t *testing.T) {
@@ -61,9 +75,8 @@ func TestHandlePlantilla_PlantillaNotFound(t *testing.T) {
 		IDPlantilla: "PC003",
 		Parametro: []models.ParametrosSQS{
 			{
-				NombreArchivo:      "nombre_archivo",
-				DescripcionRechazo: "string",
-				CodigoRechazo:      "string",
+				Nombre: "nombre_archivo",
+				Valor:  "string",
 			},
 		},
 	})
@@ -99,9 +112,8 @@ func TestHandlePlantilla_Success(t *testing.T) {
 		IDPlantilla: "PC003",
 		Parametro: []models.ParametrosSQS{
 			{
-				NombreArchivo:      "nombre_archivo",
-				DescripcionRechazo: "string",
-				CodigoRechazo:      "string",
+				Nombre: "nombre_archivo",
+				Valor:  "string",
 			},
 		},
 	})
@@ -114,7 +126,9 @@ func TestHandlePlantilla_Success(t *testing.T) {
 
 func TestHandlePlantilla_SendEmailError(t *testing.T) {
 	repo := new(MockPlantillaRepository)
-	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
+	repo.On(
+		"CheckPlantillaExists",
+		"PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
 		Asunto:       "Asunto de prueba",
 		Cuerpo:       "Cuerpo de prueba",
@@ -138,9 +152,8 @@ func TestHandlePlantilla_SendEmailError(t *testing.T) {
 		IDPlantilla: "PC003",
 		Parametro: []models.ParametrosSQS{
 			{
-				NombreArchivo:      "nombre_archivo",
-				DescripcionRechazo: "string",
-				CodigoRechazo:      "string",
+				Nombre: "nombre_archivo",
+				Valor:  "string",
 			},
 		},
 	})
@@ -153,7 +166,10 @@ func TestHandlePlantilla_SendEmailError(t *testing.T) {
 
 func TestHandlePlantilla_RepositoryError(t *testing.T) {
 	repo := new(MockPlantillaRepository)
-	repo.On("CheckPlantillaExists", "PC003").Return(false, (*models.Plantilla)(nil), errors.New("error de base de datos"))
+	repo.On(
+		"CheckPlantillaExists",
+		"PC003").Return(false, (*models.Plantilla)(nil),
+		errors.New("error de base de datos"))
 
 	service := NewPlantillaService(repo, nil)
 
@@ -161,9 +177,8 @@ func TestHandlePlantilla_RepositoryError(t *testing.T) {
 		IDPlantilla: "PC003",
 		Parametro: []models.ParametrosSQS{
 			{
-				NombreArchivo:      "nombre_archivo",
-				DescripcionRechazo: "string",
-				CodigoRechazo:      "string",
+				Nombre: "nombre_archivo",
+				Valor:  "string",
 			},
 		},
 	})

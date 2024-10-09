@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"gmf_message_processor/internal/aws"
 	"gmf_message_processor/internal/logs"
@@ -25,7 +26,6 @@ func NewSQSHandler(plantillaService *service.PlantillaService, sqsClient *aws.SQ
 
 // ProcessMessage procesa un solo mensaje desde la cola de SQS.
 func (h *SQSHandler) ProcessMessage(ctx context.Context) error {
-	logs.LogProcesandoMensajeSQS(ctx)
 
 	// Recibir un mensaje de SQS
 	output, err := h.SQSClient.Client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
@@ -34,12 +34,12 @@ func (h *SQSHandler) ProcessMessage(ctx context.Context) error {
 		WaitTimeSeconds:     5,
 	})
 	if err != nil {
-		logs.LogError(ctx, "Error al recibir mensaje de SQS: %v", err)
-		return err
+		logs.LogError("Error al recibir mensaje de SQS: %v", err)
+		return fmt.Errorf("error general al recibir mensaje de SQS: %v", err)
 	}
 
 	if len(output.Messages) == 0 {
-		logs.LogWarn(ctx, "No hay mensajes en la cola de SQS.")
+		logs.LogWarn("No hay mensajes en la cola de SQS.", "queue_url", h.SQSClient.QueueURL)
 		return nil
 	}
 
@@ -49,29 +49,30 @@ func (h *SQSHandler) ProcessMessage(ctx context.Context) error {
 	// Extraer el cuerpo del mensaje
 	messageBody, err := utils.ExtractMessageBody(*message.Body)
 	if err != nil {
-		logs.LogError(ctx, "Error extrayendo el cuerpo del mensaje: %v", err)
-		return err
+		logs.LogError("Error extrayendo el cuerpo del mensaje: %v", err)
+		return fmt.Errorf("error al extraer el cuerpo del mensaje: %v", err)
 	}
 
 	// Validar el mensaje
 	validMsg, err := utils.ValidateSQSMessage(messageBody)
 	if err != nil {
-		logs.LogError(ctx, "Error validando el mensaje: %v", err)
-		return err
+		logs.LogError("Error validando el mensaje: %v", err)
+		return fmt.Errorf("error al validar el mensaje: %v", err)
 	}
 
 	// Llamar al servicio para manejar la lógica de negocio
 	if err := h.PlantillaService.HandlePlantilla(ctx, validMsg); err != nil {
-		logs.LogError(ctx, "Error al procesar el mensaje: %v", err)
-		return err
+		logs.LogError("Error en la lógica de negocio al procesar el mensaje: %v", err)
+		return fmt.Errorf("error en la lógica de negocio al procesar el mensaje: %v", err)
 	}
 
-	logs.LogPlantillaEncontrada(ctx, validMsg.IDPlantilla)
-
-	// Eliminar el mensaje de la cola una vez procesado
+	// Si el mensaje se procesó correctamente, lo eliminamos de la cola
 	err = utils.DeleteMessageFromQueue(ctx, h.SQSClient.Client, h.SQSClient.QueueURL, message.ReceiptHandle)
 	if err != nil {
-		return err
+		logs.LogError("Error al eliminar el mensaje de la cola SQS: %v", err)
+		return fmt.Errorf("error al eliminar el mensaje de la cola SQS: %v", err)
 	}
+
+	logs.LogInfo("Mensaje procesado correctamente")
 	return nil
 }

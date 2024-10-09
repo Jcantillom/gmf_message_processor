@@ -64,10 +64,9 @@ func TestProcessMessage_Success(t *testing.T) {
 			Messages: []types.Message{
 				{
 					Body: aws.String(`{
-						"Records": [
-							{
-								"body": "{\"IdPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\"}]}"
-							}
+						"id_plantilla": "PC001",
+						"parametros": [
+							{"nombre": "nombre_archivo", "valor": "archivo1.txt"}
 						]
 					}`),
 					ReceiptHandle: aws.String("test-receipt-handle"),
@@ -238,10 +237,9 @@ func TestProcessMessage_DeleteMessageError(t *testing.T) {
 			Messages: []types.Message{
 				{
 					Body: aws.String(`{
-						"Records": [
-							{
-								"body": "{\"IdPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\"}]}"
-							}
+						"id_plantilla": "PC001",
+						"parametros": [
+							{"nombre": "nombre_archivo", "valor": "archivo1.txt"}
 						]
 					}`),
 					ReceiptHandle: aws.String("test-receipt-handle"),
@@ -311,35 +309,39 @@ func TestProcessMessage_HandlePlantillaError(t *testing.T) {
 			Messages: []types.Message{
 				{
 					Body: aws.String(`{
-						"Records": [
-							{
-								"body": "{\"IdPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\"}]}"
-							}
-						]
-					}`),
+                        "id_plantilla": "PC002",
+                        "parametros": [
+                            {"nombre": "nombre_archivo", "valor": "TGMF-2024082801010001.txt"},
+                            {"nombre": "plataforma_origen", "valor": "STRATUS"},
+                            {"nombre": "fecha_recepcion", "valor": "07/10/2024"},
+                            {"nombre": "hora_recepcion", "valor": "09:19 AM"},
+                            {"nombre": "codigo_rechazo", "valor": "EPCM002"},
+                            {"nombre": "descripcion_rechazo", "valor": "Archivo ya existe con un estado no válido para su reproceso"}
+                        ]
+                    }`),
 					ReceiptHandle: aws.String("test-receipt-handle"),
 				},
 			},
 		}, nil)
 
-	// Mock CheckPlantillaExists
+	// Mock CheckPlantillaExists for the "PC002"
 	mockRepo.On(
 		"CheckPlantillaExists",
-		"PC001").Return(true, &models.Plantilla{
-		IDPlantilla:  "PC001",
+		"PC002").Return(true, &models.Plantilla{
+		IDPlantilla:  "PC002",
 		Remitente:    "remitente@example.com",
 		Destinatario: "destinatario@example.com",
 		Asunto:       "Asunto de prueba",
 		Cuerpo:       "Hola, &nombre_archivo.",
 	}, nil)
 
-	// Mock SendEmail to return an error
+	// Mock SendEmail to return an error when trying to send the email
 	mockEmailService.On(
 		"SendEmail",
 		"remitente@example.com",
 		"destinatario@example.com",
 		"Asunto de prueba",
-		"Hola, archivo1.txt.",
+		"Hola, TGMF-2024082801010001.txt.",
 	).Return(assert.AnError)
 
 	sqsClient := &awsinternal.SQSClient{
@@ -352,17 +354,19 @@ func TestProcessMessage_HandlePlantillaError(t *testing.T) {
 	// Call the handler to process the message
 	err := sqsHandler.ProcessMessage(context.Background())
 
-	// Verify that an error occurred
+	// Verify that an error occurred (because SendEmail returns an error)
 	assert.Error(t, err)
 
 	// Verify that the mocked methods were called with the expected values
-	mockRepo.AssertCalled(t, "CheckPlantillaExists", "PC001")
+	mockRepo.AssertCalled(t, "CheckPlantillaExists", "PC002")
 	mockEmailService.AssertCalled(t,
 		"SendEmail",
 		"remitente@example.com",
 		"destinatario@example.com",
 		"Asunto de prueba",
-		"Hola, archivo1.txt.",
+		"Hola, TGMF-2024082801010001.txt.",
 	)
+
+	// Verify that DeleteMessage was NOT called, since an error occurred before deleting the message
 	mockSQSClient.AssertNotCalled(t, "DeleteMessage")
 }

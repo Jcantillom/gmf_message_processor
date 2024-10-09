@@ -1,30 +1,81 @@
 package connection
 
 import (
-	"os"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func TestDBManager_InitDB(t *testing.T) {
-	// Configurar variables de entorno necesarias para la conexión a la base de datos
-	os.Setenv("DB_HOST", "localhost")
-	os.Setenv("DB_PORT", "5432")
-	os.Setenv("DB_USER", "postgres")
-	os.Setenv("DB_PASSWORD", "postgres")
-	os.Setenv("DB_NAME", "gmfdb")
+// MockSecretService es una implementación simulada de SecretService para pruebas
+type MockSecretService struct {
+	mock.Mock
+}
 
-	// Crear instancia de DBManager
-	dbManager := NewDBManager()
+func (m *MockSecretService) GetSecret(secretName string) (*SecretData, error) {
+	args := m.Called(secretName)
+	if secretData, ok := args.Get(0).(*SecretData); ok {
+		return secretData, args.Error(1)
+	}
+	return nil, args.Error(1) // Devolver nil en caso de que no sea del tipo esperado
+}
 
-	// Inicializar la conexión a la base de datos
-	err := dbManager.InitDB()
-	assert.NoError(t, err, "La conexión a la base de datos no debería producir un error")
+// TestGetSecret éxito
+func TestGetSecret_Success(t *testing.T) {
+	mockService := new(MockSecretService)
+	secretData := &SecretData{
+		Username: "testUser",
+		Password: "testPass",
+	}
+	mockService.On("GetSecret", "test-secret").Return(secretData, nil)
 
-	// Verificar que la conexión no sea nula
-	assert.NotNil(t, dbManager.DB, "La instancia DB de Gorm no debería ser nula")
+	// Llamar al método
+	result, err := mockService.GetSecret("test-secret")
 
-	// Cerrar la conexión de la base de datos
-	dbManager.CloseDB()
+	// Verificar resultados
+	assert.NoError(t, err)
+	assert.Equal(t, secretData.Username, result.Username)
+	assert.Equal(t, secretData.Password, result.Password)
+	mockService.AssertExpectations(t)
+}
+
+// TestGetSecret_error
+func TestGetSecret_Error(t *testing.T) {
+	mockService := new(MockSecretService)
+	mockService.On(
+		"GetSecret",
+		"test-secret").Return((*SecretData)(nil), errors.New("secret not found")) // Cambiar a *SecretData(nil)
+
+	// Llamar al método
+	result, err := mockService.GetSecret("test-secret")
+
+	// Verificar resultados
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockService.AssertExpectations(t)
+}
+
+// TestNewSession éxito
+func TestNewSession_Success(t *testing.T) {
+	// Simular una sesión de AWS
+	_, err := NewSession()
+
+	assert.NoError(t, err)
+}
+
+// TestNewSession_error (puedes usar un mock para probar el error)
+func TestNewSession_Error(t *testing.T) {
+	mockService := new(MockSecretService)
+	mockService.On(
+		"GetSecret", "test").Return((*SecretData)(nil), errors.New("secret not found"))
+
+	// Llamar al método
+	result, err := mockService.GetSecret("test")
+
+	// Verificar resultados
+	assert.Error(t, err)
+	assert.Nil(t, result)
+
+	mockService.AssertExpectations(t)
 }

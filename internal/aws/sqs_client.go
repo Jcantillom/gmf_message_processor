@@ -3,13 +3,12 @@ package aws
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
-	"os"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/spf13/viper"
+	"net/http"
+	"net/url"
 )
 
 // SQSAPI define una interfaz para las operaciones de SQS.
@@ -29,7 +28,9 @@ type SQSClient struct {
 }
 
 // NewSQSClient inicializa un nuevo cliente de SQS.
-func NewSQSClient(queueURL string, loadConfigFunc func(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
+func NewSQSClient(
+	queueURL string, loadConfigFunc func(ctx context.Context,
+		optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
 	// Validar la URL de la cola
 	if err := validateQueueURL(queueURL); err != nil {
 		return nil, err
@@ -68,7 +69,7 @@ func validateQueueURL(queueURL string) error {
 
 // getEndpointResolver obtiene el resolvedor de endpoints basado en el entorno de la aplicación.
 func getEndpointResolver() (aws.EndpointResolver, error) {
-	appEnv := os.Getenv("APP_ENV")
+	appEnv := viper.GetString("APP_ENV")
 
 	switch appEnv {
 	case "local":

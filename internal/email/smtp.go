@@ -2,8 +2,8 @@ package email
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"gmf_message_processor/connection"
 	"gmf_message_processor/internal/logs"
 	"net/smtp"
 	"os"
@@ -25,20 +25,29 @@ type SMTPEmailService struct {
 type smtpSendMailFunc func(
 	addr string, a smtp.Auth, from string, to []string, msg []byte) error
 
-// NewSMTPEmailService crea una nueva instancia de SMTPEmailService.
-func NewSMTPEmailService() *SMTPEmailService {
+// NewSMTPEmailService crea una nueva instancia de SMTPEmailService usando SecretService para obtener las credenciales SMTP.
+func NewSMTPEmailService(secretService connection.SecretService) (*SMTPEmailService, error) {
+	secretName := os.Getenv("SECRETS_SMTP")
+	secretData, err := secretService.GetSecret(secretName)
+	if err != nil {
+		logs.LogError("Error al obtener las credenciales SMTP desde Secrets Manager: %v", err)
+		return nil, err
+	}
+
 	return &SMTPEmailService{
 		server:   os.Getenv("SMTP_SERVER"),
 		port:     os.Getenv("SMTP_PORT"),
-		username: os.Getenv("SMTP_USER"),
-		password: os.Getenv("SMTP_PASSWORD"),
-		sendMail: smtp.SendMail, // Utiliza la función de envío de correo SMTP por defecto
-	}
+		username: secretData.Username,
+		password: secretData.Password,
+		sendMail: smtp.SendMail,
+	}, nil
 }
 
+// SendEmail envía el correo usando las credenciales obtenidas de Secrets Manager.
 func (s *SMTPEmailService) SendEmail(remitente, destinatarios, asunto, cuerpo string) error {
 	// Validar la configuración SMTP
 	if s.server == "" || s.port == "" || s.username == "" || s.password == "" {
+		logs.LogError("Configuración SMTP incompleta en las variables de entorno", nil)
 		return fmt.Errorf("error: configuración SMTP incompleta en las variables de entorno")
 	}
 
@@ -47,14 +56,6 @@ func (s *SMTPEmailService) SendEmail(remitente, destinatarios, asunto, cuerpo st
 
 	// Separar los destinatarios por comas
 	to := strings.Split(destinatarios, ",")
-
-	// Convertir la lista de destinatarios a JSON para un log estructurado
-	toJSON, err := json.MarshalIndent(to, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error al convertir destinatarios a JSON: %v", err)
-	}
-
-	logs.LogEnviandoCorreosADestinatarios(ctx, destinatarios, toJSON)
 
 	// Configurar mensaje en formato HTML
 	msg := []byte(fmt.Sprintf(
@@ -66,17 +67,15 @@ func (s *SMTPEmailService) SendEmail(remitente, destinatarios, asunto, cuerpo st
 	))
 
 	// Manejar error de conversión de destinatarios
-	if to == nil || len(to) == 0 || strings.Contains(to[0], "\x7f") { // Verifica si hay un carácter no imprimible
+	if to == nil || len(to) == 0 || strings.Contains(to[0], "\x7f") {
 		return fmt.Errorf("error al convertir destinatarios a JSON")
 	}
 
 	// Usar la función de envoltorio smtpSendMailWrapper
-	err = s.sendMail(s.server+":"+s.port, auth, remitente, to, msg)
+	err := s.sendMail(s.server+":"+s.port, auth, remitente, to, msg)
 	if err != nil {
 		return fmt.Errorf("error enviando el correo electrónico: %v", err)
 	}
-
-	logs.LogCorreosEnviados(ctx, destinatarios)
 
 	return nil
 }

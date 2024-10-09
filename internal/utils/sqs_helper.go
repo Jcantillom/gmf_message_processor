@@ -27,21 +27,14 @@ func ReadSQSEventFromFile(filePath string) (events.SQSEvent, error) {
 }
 
 func ExtractMessageBody(sqsBody string) (string, error) {
-	var event struct {
-		Records []struct {
-			Body string `json:"body"`
-		} `json:"Records"`
-	}
-
-	if err := json.Unmarshal([]byte(sqsBody), &event); err != nil {
+	// Verificar si el mensaje es un JSON válido
+	var message map[string]interface{}
+	if err := json.Unmarshal([]byte(sqsBody), &message); err != nil {
 		return "", errors.New("error deserializando el mensaje de SQS")
 	}
 
-	if len(event.Records) == 0 {
-		return "", errors.New("no hay registros en el mensaje de SQS")
-	}
-
-	return event.Records[0].Body, nil
+	// Retornar el mensaje deserializado como string, si es necesario
+	return sqsBody, nil
 }
 
 // DeleteMessageFromQueue elimina un mensaje de la cola SQS.
@@ -51,9 +44,9 @@ func DeleteMessageFromQueue(ctx context.Context, client SQSAPI, queueURL string,
 		ReceiptHandle: receiptHandle,
 	})
 	if err != nil {
-		logs.LogError(ctx, "Error al eliminar el mensaje de SQS: %v", err)
+		logs.LogError("Error al eliminar el mensaje de SQS: %v", err)
 		return err
 	}
-	logs.LogInfo(ctx, "Mensaje eliminado de la cola de SQS.")
+	logs.LogInfo("Mensaje eliminado de la cola de SQS.")
 	return nil
 }

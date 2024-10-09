@@ -1,6 +1,7 @@
 package models
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func TestPlantillaModel_Initialization(t *testing.T) {
 func TestPlantillaModel_TableName(t *testing.T) {
 	// Verificar que el nombre de la tabla sea el esperado
 	var plantilla Plantilla
-	assert.Equal(t, "CGD_CORREOS_PLANTILLAS", plantilla.TableName())
+	assert.Equal(t, "cgd_correos_plantillas", plantilla.TableName())
 }
 
 func TestSQSMessageModel_Initialization(t *testing.T) {
@@ -43,13 +44,8 @@ func TestSQSMessageModel_Initialization(t *testing.T) {
 		IDPlantilla: "12345678-1234-1234-1234-123456789012",
 		Parametro: []ParametrosSQS{
 			{
-				NombreArchivo:      "archivo1.txt",
-				PlataformaOrigen:   "Sistema X",
-				FechaRecepcion:     "2024-09-12",
-				HoraRecepcion:      "10:00",
-				CodigoRechazo:      "404",
-				DescripcionRechazo: "Archivo no encontrado",
-				DetalleRechazo:     "El archivo solicitado no está disponible en el servidor.",
+				Nombre: "archivo1.txt",
+				Valor:  "Sistema X",
 			},
 		},
 	}
@@ -60,11 +56,41 @@ func TestSQSMessageModel_Initialization(t *testing.T) {
 
 	// Verificar que los campos de ParametrosSQS se han inicializado correctamente
 	param := sqsMessage.Parametro[0]
-	assert.Equal(t, "archivo1.txt", param.NombreArchivo)
-	assert.Equal(t, "Sistema X", param.PlataformaOrigen)
-	assert.Equal(t, "2024-09-12", param.FechaRecepcion)
-	assert.Equal(t, "10:00", param.HoraRecepcion)
-	assert.Equal(t, "404", param.CodigoRechazo)
-	assert.Equal(t, "Archivo no encontrado", param.DescripcionRechazo)
-	assert.Equal(t, "El archivo solicitado no está disponible en el servidor.", param.DetalleRechazo)
+	assert.Equal(t, "archivo1.txt", param.Nombre)
+	assert.Equal(t, "Sistema X", param.Valor)
+
+}
+func TestPlantillaTableName_DefaultSchema(t *testing.T) {
+	// Limpiar la variable de entorno para simular el comportamiento por defecto
+	os.Unsetenv("DB_SCHEMA")
+
+	plantilla := Plantilla{}
+	expectedTableName := "cgd_correos_plantillas"
+
+	tableName := plantilla.TableName()
+
+	assert.Equal(
+		t,
+		expectedTableName,
+		tableName,
+		"El nombre de la tabla por defecto debería ser 'cgd_correos_plantillas'")
+}
+
+func TestPlantillaTableName_CustomSchema(t *testing.T) {
+	// Configurar una variable de entorno para simular un esquema personalizado
+	os.Setenv("DB_SCHEMA", "custom_schema")
+
+	plantilla := Plantilla{}
+	expectedTableName := "custom_schema.cgd_correos_plantillas"
+
+	tableName := plantilla.TableName()
+
+	assert.Equal(
+		t,
+		expectedTableName,
+		tableName,
+		"El nombre de la tabla con esquema personalizado debería ser 'custom_schema.cgd_correos_plantillas'")
+
+	// Limpiar la variable de entorno después del test
+	os.Unsetenv("DB_SCHEMA")
 }

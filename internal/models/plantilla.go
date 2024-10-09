@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"os"
+	"time"
+)
 
 // Plantilla representa la estructura del modelo de Plantilla.
 type Plantilla struct {
@@ -16,5 +20,9 @@ type Plantilla struct {
 
 // TableName devuelve el nombre de la tabla para el modelo Plantilla.
 func (Plantilla) TableName() string {
-	return "CGD_CORREOS_PLANTILLAS"
+	schema := os.Getenv("DB_SCHEMA")
+	if schema == "" {
+		return "cgd_correos_plantillas"
+	}
+	return fmt.Sprintf("%s.cgd_correos_plantillas", schema)
 }

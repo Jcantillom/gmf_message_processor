@@ -106,7 +106,7 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 	)
 	if err != nil {
 		logs.LogError("Error al enviar el correo electrónico", err, messageID)
-		return err
+		panic(err)
 	}
 
 	return nil

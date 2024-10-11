@@ -4,6 +4,7 @@ package models
 type SQSMessage struct {
 	IDPlantilla string          `json:"id_plantilla"`
 	Parametro   []ParametrosSQS `json:"parametros"`
+	RetryCount  int             `json:"retry_count"`
 }
 
 type ParametrosSQS struct {

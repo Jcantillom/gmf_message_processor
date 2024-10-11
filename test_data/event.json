@@ -1,8 +1,8 @@
 {
   "Records": [
     {
-      "MessageId": "f9132f20-796c-496b-a4a8-70e946930a4e",
-      "ReceiptHandle": "MzA1YjMzNDAtMjI3My00MDRhLTlkZjUtNGJlY2RmYzgwYWY4IGFybjphd3M6c3FzOnVzLWVhc3QtMTowMDAwMDAwMDAwMDA6bXktcXVldWUgZjkxMzJmMjAtNzk2Yy00OTZiLWE0YTgtNzBlOTQ2OTMwYTRlIDE3Mjg1ODMwMTAuMTc1MTE2",
+      "MessageId": "4be6763c-d79e-472d-927f-a909abb84c5e",
+      "ReceiptHandle": "ZTlmY2Y5N2YtODg3Ni00NWUyLTg4ZTgtNjRiOTg2MzBhMmNlIGFybjphd3M6c3FzOnVzLWVhc3QtMTowMDAwMDAwMDAwMDA6bXktcXVldWUgNGJlNjc2M2MtZDc5ZS00NzJkLTkyN2YtYTkwOWFiYjg0YzVlIDE3Mjg2NzI3MTEuMDY0NzM2OA==",
       "body": "{\"id_plantilla\": \"PC001\", \"parametros\": [{\"nombre\": \"nombre_archivo\", \"valor\": \"TGMF-2024082801010001.txt\"}, {\"nombre\": \"plataforma_origen\", \"valor\": \"STRATUS\"}, {\"nombre\": \"fecha_recepcion\", \"valor\": \"07/10/2024\"}, {\"nombre\": \"hora_recepcion\", \"valor\": \"09:19 AM\"}, {\"nombre\": \"codigo_rechazo\", \"valor\": \"EPCM002\"}, {\"nombre\": \"descripcion_rechazo\", \"valor\": \"Archivo ya existe con un estado no válido para su reproceso\"}]}",
       "attributes": {
         "ApproximateReceiveCount": "1",

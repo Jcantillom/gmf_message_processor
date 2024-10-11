@@ -18,6 +18,10 @@ type SQSAPI interface {
 		input *sqs.DeleteMessageInput,
 		opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 	GetQueueURL() string
+	SendMessage(
+		ctx context.Context,
+		input *sqs.SendMessageInput,
+		opts ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
 }
 
 // SQSClient define la estructura del cliente de SQS.
@@ -34,6 +38,11 @@ func (s *SQSClient) GetQueueURL() string {
 // DeleteMessage elimina un mensaje de la cola SQS.
 func (s *SQSClient) DeleteMessage(ctx context.Context, input *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
 	return s.Client.DeleteMessage(ctx, input, opts...)
+}
+
+// SendMessage envía un mensaje a la cola SQS.
+func (s *SQSClient) SendMessage(ctx context.Context, input *sqs.SendMessageInput, opts ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
+	return s.Client.SendMessage(ctx, input, opts...)
 }
 
 // NewSQSClient inicializa un nuevo cliente de SQS.

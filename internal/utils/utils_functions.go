@@ -8,6 +8,8 @@ import (
 	"gmf_message_processor/internal/aws"
 	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -16,9 +18,15 @@ type UtilsInterface interface {
 	ValidateSQSMessage(messageBody string) (*models.SQSMessage, error)
 	DeleteMessageFromQueue(
 		ctx context.Context,
-		client aws.SQSAPI, // Cambiado a aws.SQSAPI
+		client aws.SQSAPI,
 		queueURL string,
 		receiptHandle *string,
+		messageID string) error
+	SendMessageToQueue(
+		ctx context.Context,
+		client aws.SQSAPI,
+		queueURL string,
+		messageBody string,
 		messageID string) error
 }
 
@@ -45,9 +53,12 @@ func (u *Utils) DeleteMessageFromQueue(
 		return err
 	}
 
+	logs.LogDebug("Mensaje eliminado de SQS", messageID)
+
 	return nil
 }
 
+// ValidateSQSMessage ...
 func (u *Utils) ValidateSQSMessage(body string) (*models.SQSMessage, error) {
 	var msg models.SQSMessage
 	if err := json.Unmarshal([]byte(body), &msg); err != nil {
@@ -59,10 +70,40 @@ func (u *Utils) ValidateSQSMessage(body string) (*models.SQSMessage, error) {
 	return &msg, nil
 }
 
+// SendMessageToQueue ...
+// SendMessageToQueue ...
+func (u *Utils) SendMessageToQueue(ctx context.Context, client aws.SQSAPI, queueURL string, messageBody string, messageID string) error {
+	_, err := client.SendMessage(ctx, &sqs.SendMessageInput{
+		QueueUrl:    &queueURL,
+		MessageBody: &messageBody,
+	})
+
+	if err != nil {
+		logs.LogError("Error al enviar el mensaje a SQS", err, messageID)
+		return err
+	}
+
+	logs.LogInfo("Mensaje enviado a SQS", messageID)
+	return nil
+}
+
 // ReplacePlaceholders ...
 func ReplacePlaceholders(text string, params map[string]string) string {
 	for key, value := range params {
 		text = strings.ReplaceAll(text, key, value)
 	}
 	return text
+}
+
+// GetMaxRetries ...
+func GetMaxRetries() int {
+	maxRetriesStr := os.Getenv("MAX_RETRIES")
+	if maxRetriesStr == "" {
+		return 3
+	}
+	maxRetries, err := strconv.Atoi(maxRetriesStr)
+	if err != nil {
+		return 3
+	}
+	return maxRetries
 }

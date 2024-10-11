@@ -59,7 +59,7 @@ func TestGetSecret_Error(t *testing.T) {
 // TestNewSession éxito
 func TestNewSession_Success(t *testing.T) {
 	// Simular una sesión de AWS
-	_, err := NewSession()
+	_, err := NewSession("test")
 
 	assert.NoError(t, err)
 }

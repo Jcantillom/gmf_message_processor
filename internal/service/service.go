@@ -10,12 +10,17 @@ import (
 )
 
 type IPlantillaService interface {
-	HandlePlantilla(ctx context.Context, msg *models.SQSMessage) error
+	HandlePlantilla(ctx context.Context, msg *models.SQSMessage, messageID string) error
 }
 
 // EmailService define la interfaz para el servicio de correo electrónico.
 type EmailService interface {
-	SendEmail(remitente, destinatarios, asunto, cuerpo string) error
+	SendEmail(
+		remitente,
+		destinatarios,
+		asunto,
+		cuerpo,
+		messageID string) error
 }
 
 // PlantillaRepository define la interfaz para el repositorio de Plantilla.
@@ -37,18 +42,19 @@ func NewPlantillaService(repo PlantillaRepository, emailService EmailService) *P
 	}
 }
 
-func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSMessage) error {
+func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSMessage, messageID string) error {
 	// Verificar si la plantilla existe en la base de datos
 	exists, plantilla, err := s.repo.CheckPlantillaExists(msg.IDPlantilla)
 	if err != nil {
 		logs.LogError(
-			"Error al verificar si la plantilla con ID %s existe en la base de datos: %v",
+			fmt.Sprintf("Error al verificar si la plantilla con ID %s existe en la base de datos", msg.IDPlantilla),
 			err,
+			messageID,
 		)
 		return err
 	}
 	if !exists {
-		logs.LogError("La plantilla con ID %s no existe en la base de datos", fmt.Errorf(msg.IDPlantilla))
+		logs.LogError(fmt.Sprintf("La plantilla con ID %s no existe en la base de datos", msg.IDPlantilla), nil, messageID)
 		return errors.New("la plantilla no existe en la base de datos")
 	}
 
@@ -56,6 +62,7 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 	if len(msg.Parametro) == 0 {
 		logs.LogInfo(
 			"No se proporcionaron parámetros para la plantilla. Se utilizarán valores predeterminados.",
+			messageID,
 		)
 
 		// Aquí puedes usar valores predeterminados o simplemente continuar sin los parámetros.
@@ -65,13 +72,18 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 		plantilla.Cuerpo = utils.ReplacePlaceholders(plantilla.Cuerpo, placeholders)
 
 		// Continuar con el envío de correo aunque no haya parámetros
-		err = s.emailService.SendEmail(plantilla.Remitente, plantilla.Destinatario, plantilla.Asunto, plantilla.Cuerpo)
+		err = s.emailService.SendEmail(
+			plantilla.Remitente,
+			plantilla.Destinatario,
+			plantilla.Asunto,
+			plantilla.Cuerpo,
+			messageID)
 		if err != nil {
-			logs.LogError("Error al enviar el correo electrónico: %v", err)
+			logs.LogError("Error al enviar el correo electrónico", err, messageID)
 			return err
 		}
 
-		logs.LogInfo("Correo electrónico enviado sin parámetros")
+		logs.LogInfo("Correo electrónico enviado sin parámetros", messageID)
 		return nil
 	}
 
@@ -90,12 +102,12 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 		plantilla.Destinatario,
 		plantilla.Asunto,
 		plantilla.Cuerpo,
+		messageID,
 	)
 	if err != nil {
-		logs.LogError("Error al enviar el correo electrónico: %v", err)
+		logs.LogError("Error al enviar el correo electrónico", err, messageID)
 		return err
 	}
 
-	logs.LogInfo("Correo electrónico enviado con éxito")
 	return nil
 }

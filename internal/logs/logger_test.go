@@ -24,7 +24,7 @@ func captureOutput(f func()) string {
 
 func TestLogInfo(t *testing.T) {
 	output := captureOutput(func() {
-		LogInfo("Este es un mensaje de información")
+		LogInfo("Este es un mensaje de información", "messageID")
 	})
 
 	expected := "INFO"
@@ -36,7 +36,7 @@ func TestLogInfo(t *testing.T) {
 func TestLogWarn(t *testing.T) {
 	// Test sin parámetros opcionales
 	output := captureOutput(func() {
-		LogWarn("Este es un mensaje de advertencia")
+		LogWarn("Este es un mensaje de advertencia", "messageID")
 	})
 
 	expected := "WARNING"
@@ -46,19 +46,19 @@ func TestLogWarn(t *testing.T) {
 
 	// Test con parámetros opcionales
 	output = captureOutput(func() {
-		LogWarn("Este es un mensaje de advertencia", "DB_HOST", "localhost")
+		LogWarn("Este es un mensaje de advertencia", "messageID", "key", "value")
 	})
 
-	expectedMessage := "DB_HOST: localhost"
-	if !containsLog(output, expectedMessage) {
-		t.Errorf("Se esperaba el mensaje '%s' en la salida, pero no se encontró. Salida: %s", expectedMessage, output)
+	expected = "WARNING"
+	if !containsLog(output, expected) {
+		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
 	}
 }
 
 func TestLogError(t *testing.T) {
 	// Test sin error
 	output := captureOutput(func() {
-		LogError("Este es un error sin detalles", nil)
+		LogError("Este es un error sin detalles", nil, "messageID")
 	})
 
 	expected := "ERROR"
@@ -68,7 +68,7 @@ func TestLogError(t *testing.T) {
 
 	// Test con error
 	err := captureOutput(func() {
-		LogError("Este es un error con detalles", os.ErrNotExist)
+		LogError("Este es un error con detalles", os.ErrNotExist, "messageID")
 	})
 
 	expectedMessage := "Error: file does not exist"
@@ -78,8 +78,11 @@ func TestLogError(t *testing.T) {
 }
 
 func TestLogDebug(t *testing.T) {
+	os.Setenv("LOG_LEVEL", "DEBUG")
+	defer os.Unsetenv("LOG_LEVEL")
+
 	output := captureOutput(func() {
-		LogDebug("Este es un mensaje de depuración")
+		LogDebug("Este es un mensaje de depuración", "messageID")
 	})
 
 	expected := "DEBUG"

@@ -1,7 +1,0 @@
-{
-  "Records": [
-    {
-      "body": "{\"idPlantilla\": \"PC001\", \"parametro\": [{\"nombre_archivo\": \"archivo1.txt\", \"plataforma_origen\": \"plataforma1\", \"fecha_recepcion\": \"2024-09-08\", \"hora_recepcion\": \"10:00\", \"codigo_rechazo\": \"404\", \"descripcion_rechazo\": \"Archivo no encontrado\", \"detalle_rechazo\": \"El archivo no existe en el servidor.\"}]}"
-    }
-  ]
-}

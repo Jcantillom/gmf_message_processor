@@ -17,8 +17,8 @@ var ctx = context.TODO()
 
 // DBManagerInterface define los métodos que debe implementar un DBManager.
 type DBManagerInterface interface {
-	InitDB() error
-	CloseDB()
+	InitDB(messageID string) error
+	CloseDB(messageID string)
 	GetDB() *gorm.DB
 }
 
@@ -36,11 +36,12 @@ func NewDBManager(service SecretService) *DBManager {
 }
 
 // InitDB inicializa la conexión a la base de datos y realiza migraciones.
-func (dbm *DBManager) InitDB() error {
+func (dbm *DBManager) InitDB(messageID string) error {
 	// Obtener el secreto
 	secretName := os.Getenv("SECRETS_DB")
-	secretData, err := dbm.SecretService.GetSecret(secretName)
+	secretData, err := dbm.SecretService.GetSecret(secretName, messageID)
 	if err != nil {
+		logs.LogError("Error al obtener el secreto", err, messageID)
 		return fmt.Errorf("error al obtener el secreto: %w", err)
 	}
 
@@ -66,25 +67,24 @@ func (dbm *DBManager) InitDB() error {
 	)
 
 	// Abrir la conexión a la base de datos usando GORM
-	if err := dbm.openConnection(dsn, newLogger); err != nil {
+	if err := dbm.openConnection(dsn, newLogger, messageID); err != nil {
 		return err
 	}
 
-	// Migrar la base de datos
-	//if err := dbm.migrate(); err != nil {
-	//	return err
-	//}
+	// Loguear el éxito de la conexión a la base de datos
+	logs.LogDebug("Conexión a la base de datos establecida", messageID)
 
 	return nil
 }
 
 // openConnection establece la conexión a la base de datos.
-func (dbm *DBManager) openConnection(dsn string, logger logger.Interface) error {
+func (dbm *DBManager) openConnection(dsn string, logger logger.Interface, messageID string) error {
 	var err error
 	dbm.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger,
 	})
 	if err != nil {
+		logs.LogError("Error al abrir la conexión a la base de datos", err, messageID)
 		return fmt.Errorf("error al abrir la conexión a la base de datos: %w", err)
 	}
 	return nil
@@ -96,23 +96,22 @@ func (dbm *DBManager) GetDB() *gorm.DB {
 }
 
 // CloseDB cierra la conexión a la base de datos.
-func (dbm *DBManager) CloseDB() {
+func (dbm *DBManager) CloseDB(messageID string) {
 	if dbm.DB == nil {
 		// Si la conexión no ha sido inicializada, no intentamos cerrarla
-		log.Println(
-			"Advertencia: La conexión a la base de datos no ha sido inicializada o ya fue cerrada.")
+		logs.LogWarn("La conexión a la base de datos no ha sido inicializada", messageID)
 		return
 	}
 
 	sqlDB, err := dbm.DB.DB()
 	if err != nil {
-		logs.LogError("Error al obtener la conexión de la base de datos", err)
+		logs.LogError("Error al obtener la conexión de la base de datos", err, messageID)
 		return
 	}
 
 	if err := sqlDB.Close(); err != nil {
-		logs.LogError("Error al cerrar la conexión de la base de datos", err)
+		logs.LogError("Error al cerrar la conexión de la base de datos", err, messageID)
 	} else {
-		logs.LogInfo("Conexión a la base de datos cerrada")
+		logs.LogDebug("Conexión a la base de datos cerrada", messageID)
 	}
 }

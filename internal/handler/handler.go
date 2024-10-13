@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"gmf_message_processor/internal/aws"
@@ -116,31 +117,39 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 		if err := h.PlantillaService.HandlePlantilla(ctx, validMsg, messageID); err != nil {
 			h.Logger.LogError("Error al procesar el mensaje", err, messageID)
 
-			// Aquí puedes enviar el mensaje nuevamente a SQS
+			// Aumentar el contador de reintentos
 			validMsg.RetryCount++ // aumentar el contador de reintentos
+
+			// Comprobar si no excede el máximo permitido
 			if validMsg.RetryCount <= utils.GetMaxRetries() {
 				h.Logger.LogInfo(fmt.Sprintf(
 					"Reintentando el mensaje. Conteo actual: %d", validMsg.RetryCount), messageID)
 
 				// Preparar el nuevo cuerpo del mensaje con el contador de reintentos
-				messageBodyWithRetry := fmt.Sprintf(
-					"{\"id_plantilla\": \"%s\", \"parametros\": %s, \"retry_count\": %d}",
-					validMsg.IDPlantilla,
-					// Aquí debes agregar la lógica para convertir validMsg.Parametro a un JSON válido
-					validMsg.Parametro,
-					validMsg.RetryCount,
-				)
+				messageBodyWithRetry, err := json.Marshal(struct {
+					IDPlantilla string                 `json:"id_plantilla"`
+					Parametros  []models.ParametrosSQS `json:"parametros"`
+					RetryCount  int                    `json:"retry_count"`
+				}{
+					IDPlantilla: validMsg.IDPlantilla,
+					Parametros:  validMsg.Parametro,
+					RetryCount:  validMsg.RetryCount,
+				})
+				if err != nil {
+					h.Logger.LogError("Error al convertir el mensaje a JSON", err, messageID)
+					return err
+				}
 
+				// Enviar el mensaje nuevamente a SQS
 				if err := h.Utils.SendMessageToQueue(
-					ctx, h.SQSClient, h.SQSClient.GetQueueURL(), messageBodyWithRetry, messageID); err != nil {
-					h.Logger.LogError(
-						"Error al reenviar el mensaje a SQS", err, messageID)
+					ctx, h.SQSClient, h.SQSClient.GetQueueURL(), string(messageBodyWithRetry), messageID); err != nil {
+					h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
 				}
 			} else {
-				h.Logger.LogError(
-					"Se alcanzó el máximo de reintentos", nil, messageID)
+				h.Logger.LogError("Se alcanzó el máximo de reintentos", nil, messageID)
 			}
 		}
+
 	}
 	return nil
 }

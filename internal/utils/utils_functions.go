@@ -71,11 +71,24 @@ func (u *Utils) ValidateSQSMessage(body string) (*models.SQSMessage, error) {
 }
 
 // SendMessageToQueue ...
-// SendMessageToQueue ...
-func (u *Utils) SendMessageToQueue(ctx context.Context, client aws.SQSAPI, queueURL string, messageBody string, messageID string) error {
+func (u *Utils) SendMessageToQueue(
+	ctx context.Context, client aws.SQSAPI, queueURL string, messageBody string, messageID string) error {
+
+	delaySecondsStr := os.Getenv("SQS_MESSAGE_DELAY")
+	delaySeconds := 0 // Valor por defecto
+
+	if delaySecondsStr != "" {
+		var err error
+		delaySeconds, err = strconv.Atoi(delaySecondsStr)
+		if err != nil {
+			logs.LogError("Error al convertir el valor de SQS_MESSAGE_DELAY", err, messageID)
+			return err
+		}
+	}
 	_, err := client.SendMessage(ctx, &sqs.SendMessageInput{
-		QueueUrl:    &queueURL,
-		MessageBody: &messageBody,
+		QueueUrl:     &queueURL,
+		MessageBody:  &messageBody,
+		DelaySeconds: int32(delaySeconds),
 	})
 
 	if err != nil {
@@ -83,7 +96,7 @@ func (u *Utils) SendMessageToQueue(ctx context.Context, client aws.SQSAPI, queue
 		return err
 	}
 
-	logs.LogInfo("Mensaje enviado a SQS", messageID)
+	logs.LogInfo("Mensaje enviado a SQS con éxito", messageID)
 	return nil
 }
 

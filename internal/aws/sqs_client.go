@@ -36,18 +36,21 @@ func (s *SQSClient) GetQueueURL() string {
 }
 
 // DeleteMessage elimina un mensaje de la cola SQS.
-func (s *SQSClient) DeleteMessage(ctx context.Context, input *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
+func (s *SQSClient) DeleteMessage(
+	ctx context.Context, input *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
 	return s.Client.DeleteMessage(ctx, input, opts...)
 }
 
 // SendMessage envía un mensaje a la cola SQS.
-func (s *SQSClient) SendMessage(ctx context.Context, input *sqs.SendMessageInput, opts ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
+func (s *SQSClient) SendMessage(
+	ctx context.Context, input *sqs.SendMessageInput, opts ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
 	return s.Client.SendMessage(ctx, input, opts...)
 }
 
 // NewSQSClient inicializa un nuevo cliente de SQS.
 func NewSQSClient(
-	queueURL string, loadConfigFunc func(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
+	queueURL string, loadConfigFunc func(
+		ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
 	// Validar la URL de la cola
 	if err := validateQueueURL(queueURL); err != nil {
 		return nil, err
@@ -90,7 +93,8 @@ func getEndpointResolver() aws.EndpointResolver {
 					SigningRegion: "us-east-1",
 				}, nil
 			case "dev", "prod", "qa":
-				return aws.Endpoint{}, fmt.Errorf("unknown endpoint requested for service %s in region %s", service, region)
+				return aws.Endpoint{}, fmt.Errorf(
+					"unknown endpoint requested for service %s in region %s", service, region)
 			default:
 				return aws.Endpoint{}, fmt.Errorf("unknown APP_ENV: %s", appEnv) // Asegúrate de que esto esté incluido
 			}

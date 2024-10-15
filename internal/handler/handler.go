@@ -92,7 +92,7 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 			if r := recover(); r != nil {
 				h.Logger.LogError("Error al procesar el mensaje", fmt.Errorf("%v", r), messageID)
 				validMsg.RetryCount++
-				if validMsg.RetryCount <= utils.GetMaxRetries() { // asegúrate de que no exceda el máximo
+				if validMsg.RetryCount <= utils.GetMaxRetries() {
 					h.Logger.LogInfo(fmt.Sprintf(
 						"Reintentando el mensaje. Conteo actual: %d", validMsg.RetryCount), messageID)
 

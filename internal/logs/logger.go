@@ -49,6 +49,8 @@ const (
 	Blue   = "\033[34m"
 )
 
+var Logger LogInterface = &LoggerAdapter{}
+
 // basePath almacena la ruta base del proyecto, que se obtiene al iniciar la aplicación.
 var basePath string
 
@@ -67,9 +69,12 @@ func getCurrentTimestamp() string {
 	return time.Now().Format("2006-01-02 15:04:05")
 }
 
+// Define una función para obtener el caller, que será usada en los logs
+var runtimeCaller = runtime.Caller
+
 // getCallerInfo obtiene el archivo y la línea desde donde se llamó el logger.
 func getCallerInfo() string {
-	_, file, line, ok := runtime.Caller(3)
+	_, file, line, ok := runtimeCaller(3)
 	if !ok {
 		return "???"
 	}
@@ -82,7 +87,16 @@ func logMessage(levelColor string, level string, message string, messageID strin
 	timestamp := getCurrentTimestamp()
 	callerInfo := getCallerInfo()
 	if messageID != "" {
-		fmt.Printf("%s [%s%s%s] [%s] [MessageId: %s] %s\n", timestamp, levelColor, level, Reset, callerInfo, messageID, message)
+		fmt.Printf(
+			"%s [%s%s%s] [%s] [MessageId: %s] %s\n",
+			timestamp,
+			levelColor,
+			level,
+			Reset,
+			callerInfo,
+			messageID,
+			message,
+		)
 	} else {
 		fmt.Printf("%s [%s%s%s] [%s] %s\n", timestamp, levelColor, level, Reset, callerInfo, message)
 	}

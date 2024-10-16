@@ -9,6 +9,8 @@ import (
 	"gmf_message_processor/internal/logs"
 )
 
+var CreateSession = session.NewSession
+
 // NewSession crea una nueva sesión de AWS según el entorno
 func NewSession(messageID string) (*session.Session, error) {
 	environment := os.Getenv("APP_ENV")
@@ -27,7 +29,7 @@ func NewSession(messageID string) (*session.Session, error) {
 	}
 
 	// Crear una nueva sesión de AWS
-	newSession, err := session.NewSession(config)
+	newSession, err := CreateSession(config)
 	if err != nil {
 		logs.LogError("Error al crear la sesión de AWS", err, messageID)
 		return nil, err

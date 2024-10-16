@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/spf13/viper"
@@ -13,70 +14,88 @@ import (
 	"gmf_message_processor/internal/repository"
 	"gmf_message_processor/internal/service"
 	"gmf_message_processor/internal/utils"
+	"os"
 )
 
 type AppContext struct {
-	PlantillaService *service.PlantillaService
-	DBManager        *connection.DBManager
-	SQSHandler       *handler.SQSHandler
-	Logger           *logs.LoggerAdapter
-	SQSClient        *internalAws.SQSClient
+	PlantillaService service.IPlantillaService
+	DBManager        connection.DBManagerInterface
+	SQSHandler       handler.SQSHandlerInterface
+	Logger           logs.LogInterface
+	SQSClient        internalAws.SQSAPI
 	Utils            *utils.Utils
 }
 
-// InitApplication Inicializa la aplicación y devuelve un AppContext con los servicios y configuraciones necesarios.
-func InitApplication(messageID string) (*AppContext, error) {
+func logDatabaseConnectionEstablished(messageID string) {
+	logs.Logger.LogDebug("Conexión a la base de datos establecida", messageID)
+}
+
+func initializeRepository(dbManager connection.DBManagerInterface) *repository.GormPlantillaRepository {
+	return repository.NewPlantillaRepository(dbManager.GetDB())
+}
+
+// InitApplication inicializa la aplicación y devuelve un AppContext con los servicios y configuraciones necesarios.
+func InitApplication(
+	messageID string,
+	secretService connection.SecretService,
+	dbManager connection.DBManagerInterface) (*AppContext, error) {
 	// Inicializar el ConfigManager y cargar configuración
-	configManager := NewConfigManager()
+	configManager := NewConfigManager(&logs.LoggerAdapter{})
 	configManager.InitConfig(messageID)
+
+	// Validar y obtener secretos necesarios
+	_, err := getSecret(secretService, "SECRETS_DB", messageID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = getSecret(secretService, "SECRETS_SMTP", messageID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Inicializar el Logger
 	logger := &logs.LoggerAdapter{}
-
-	// Crear una Instancia de Utils (que implementa UtilsInterface)
 	utilsImpl := &utils.Utils{}
 
-	// Inicializar el Servicio de Secretos
-	secretService := connection.NewSecretService()
-
 	// Inicializar el DBManager y abrir la conexión a la base de datos
-	dbManager := connection.NewDBManager(secretService)
-	err := dbManager.InitDB(messageID)
+	err = dbManager.InitDB(messageID)
 	if err != nil {
 		logs.LogError("Error inicializando la base de datos", err, messageID)
 		return nil, err
 	}
-	logs.LogDebug("Conexión a la base de datos establecida", messageID)
+
+	logDatabaseConnectionEstablished(messageID)
 
 	// Inicializar el repositorio GORM con la conexión a la base de datos
-	repo := repository.NewPlantillaRepository(dbManager.DB)
+	repo := repository.NewPlantillaRepository(dbManager.GetDB())
 
 	// Crear una instancia del servicio de correo electrónico utilizando SMTP
-	emailService, smtpErr := email.NewSMTPEmailService(secretService, messageID) // Pasar messageID
+	emailService, smtpErr := email.NewSMTPEmailService(secretService, messageID)
 	if smtpErr != nil {
 		logs.LogError("Error inicializando el servicio SMTP", smtpErr, messageID)
 		return nil, smtpErr
 	}
-	// Crear una instancia del servicio PlantillaService con el servicio de correo electrónico
+
+	// Crear una instancia del servicio PlantillaService
 	plantillaService := service.NewPlantillaService(repo, emailService)
 
-	// Función para cargar la configuración de AWS
-	loadConfigFunc := func(ctx context.Context, optFns ...func(*awsConfig.LoadOptions) error) (
-		aws.Config,
-		error,
-	) {
-		return awsConfig.LoadDefaultConfig(ctx, optFns...)
-	}
-
-	// Inicializar SQSClient
-	sqsClient, err := internalAws.NewSQSClient(viper.GetString("SQS_QUEUE_URL"), loadConfigFunc)
+	// Inicializar el cliente SQS
+	sqsClient, err := initializeSQSClient(messageID)
 	if err != nil {
-		logs.LogError("Error inicializando SQS Client", err, messageID)
 		return nil, err
 	}
+	// Obtener la URL de la cola SQS desde la configuración
+	queueURL := viper.GetString("SQS_QUEUE_URL")
 
 	// Crear un nuevo manejador de SQS
-	sqsHandler := handler.NewSQSHandler(plantillaService, sqsClient, utilsImpl, logger)
+	sqsHandler := handler.NewSQSHandler(
+		plantillaService,
+		sqsClient,
+		utilsImpl,
+		logger,
+		queueURL,
+	)
 
 	return &AppContext{
 		PlantillaService: plantillaService,
@@ -88,7 +107,43 @@ func InitApplication(messageID string) (*AppContext, error) {
 	}, nil
 }
 
-func CleanupApplication(dbManager *connection.DBManager, messageID string) {
+// getSecret obtiene un secreto validando que esté configurado en las variables de entorno
+func getSecret(
+	secretService connection.SecretService,
+	envVar string,
+	messageID string) (*connection.SecretData, error) {
+	secretName := os.Getenv(envVar)
+	if secretName == "" {
+		logs.LogError(fmt.Sprintf("La variable %s no está configurada", envVar), nil, messageID)
+		return nil, fmt.Errorf("la variable %s no está configurada", envVar)
+	}
+
+	secret, err := secretService.GetSecret(secretName, messageID)
+	if err != nil {
+		logs.LogError(fmt.Sprintf("Error al obtener %s", envVar), err, messageID)
+		return nil, err
+	}
+
+	return secret, nil
+}
+
+// initializeSQSClient inicializa el cliente de SQS
+func initializeSQSClient(messageID string) (internalAws.SQSAPI, error) {
+	loadConfigFunc := func(ctx context.Context, optFns ...func(*awsConfig.LoadOptions) error) (aws.Config, error) {
+		return awsConfig.LoadDefaultConfig(ctx, optFns...)
+	}
+
+	sqsClient, err := internalAws.NewSQSClient(viper.GetString("SQS_QUEUE_URL"), loadConfigFunc)
+	if err != nil {
+		logs.LogError("Error inicializando SQS Client", err, messageID)
+		return nil, err
+	}
+
+	return sqsClient, nil
+}
+
+// CleanupApplication realiza la limpieza del DBManager
+func CleanupApplication(dbManager connection.DBManagerInterface, messageID string) {
 	if dbManager != nil {
 		dbManager.CloseDB(messageID)
 	} else {

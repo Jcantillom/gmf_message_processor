@@ -9,25 +9,46 @@ import (
 	"gmf_message_processor/connection"
 	"gmf_message_processor/internal/handler"
 	"gmf_message_processor/internal/logs"
-	"os"
 	"time"
 )
 
-func ProcessLocalEvent(sqsHandler *handler.SQSHandler, dbManager *connection.DBManager) {
-	eventFilePath := "test_data/event.json"
-	eventFile, err := os.ReadFile(eventFilePath)
+var CleanupApplicationFunc = config.CleanupApplication
+
+// FileReaderFunc define el tipo de una función que lee un archivo.
+type FileReaderFunc func(filename string) ([]byte, error)
+
+// ReadSQSEventFromFile lee y deserializa el archivo JSON de evento de SQS.
+func ReadSQSEventFromFile(fileReader FileReaderFunc) (*events.SQSEvent, error) {
+	// Leer el archivo JSON
+	filePath := "test_data/event.json"
+	eventFile, err := fileReader(filePath)
 	if err != nil {
 		logs.LogError("Error al leer el archivo de evento", err, "")
-		config.CleanupApplication(dbManager, "")
-		return
+		return nil, err
 	}
 
-	// Deserializar el contenido del archivo event.json al tipo SQSEvent
+	// Deserializer el contenido del archivo event.json al tipo SQSEvent
 	var sqsEvent events.SQSEvent
 	err = json.Unmarshal(eventFile, &sqsEvent)
 	if err != nil {
 		logs.LogError("Error deserializando el archivo event.json", err, "")
-		config.CleanupApplication(dbManager, "")
+		return nil, err
+	}
+
+	return &sqsEvent, nil
+}
+
+func ProcessLocalEvent(
+	sqsHandler handler.SQSHandlerInterface,
+	dbManager connection.DBManagerInterface,
+	fileReader FileReaderFunc) {
+
+	defer dbManager.CloseDB("")
+
+	// Leer el archivo de evento SQS usando la función fileReader
+	sqsEvent, err := ReadSQSEventFromFile(fileReader)
+	if err != nil {
+		CleanupApplicationFunc(dbManager, "")
 		return
 	}
 
@@ -41,7 +62,7 @@ func ProcessLocalEvent(sqsHandler *handler.SQSHandler, dbManager *connection.DBM
 	startTime := time.Now()
 
 	// Procesar el evento simulado
-	err = sqsHandler.HandleLambdaEvent(context.TODO(), sqsEvent)
+	err = sqsHandler.HandleLambdaEvent(context.TODO(), *sqsEvent)
 	if err != nil {
 		logs.LogError("Error procesando el evento SQS simulado", err, messageID)
 	} else {

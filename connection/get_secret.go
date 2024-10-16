@@ -31,6 +31,10 @@ func NewSecretService() SecretService {
 
 // GetSecret obtiene el secreto de AWS Secrets Manager o LocalStack
 func (s *SecretServiceImpl) GetSecret(secretName string, messageID string) (*SecretData, error) {
+	if secretName == "" {
+		logs.LogError("El nombre del secreto no puede estar vacío", nil, messageID)
+		return nil, errors.New("el nombre del secreto no puede estar vacío")
+	}
 	// Crear sesión de AWS
 	sess, err := NewSession(messageID)
 	if err != nil {

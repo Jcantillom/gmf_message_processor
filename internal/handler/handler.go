@@ -10,6 +10,11 @@ import (
 	"gmf_message_processor/internal/utils"
 )
 
+// SQSHandlerInterface ...
+type SQSHandlerInterface interface {
+	HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error
+}
+
 // LogInterface ...
 type LogInterface interface {
 	LogError(message string, err error, messageID string)
@@ -45,6 +50,7 @@ type SQSHandler struct {
 	SQSClient        aws.SQSAPI
 	Utils            UtilsInterface
 	Logger           LogInterface
+	QueueURL         string // Nueva propiedad para almacenar la URL de la cola
 }
 
 // NewSQSHandler ...
@@ -52,16 +58,17 @@ func NewSQSHandler(
 	plantillaService PlantillaServiceInterface,
 	sqsClient aws.SQSAPI,
 	utils UtilsInterface,
-	logger LogInterface) *SQSHandler {
+	logger LogInterface,
+	queueURL string) *SQSHandler { // Recibe la QueueURL como parámetro
 	return &SQSHandler{
 		PlantillaService: plantillaService,
 		SQSClient:        sqsClient,
 		Utils:            utils,
 		Logger:           logger,
+		QueueURL:         queueURL, // Asigna la URL de la cola
 	}
 }
 
-// HandleLambdaEvent ...
 // HandleLambdaEvent ...
 func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error {
 	for _, record := range sqsEvent.Records {
@@ -81,7 +88,7 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 
 		// Eliminar el mensaje de SQS antes de procesarlo
 		err = h.Utils.DeleteMessageFromQueue(
-			ctx, h.SQSClient, h.SQSClient.GetQueueURL(), &record.ReceiptHandle, messageID)
+			ctx, h.SQSClient, h.QueueURL, &record.ReceiptHandle, messageID) // Usa h.QueueURL en lugar de GetQueueURL()
 		if err != nil {
 			h.Logger.LogError("Error al eliminar el mensaje de SQS", err, messageID)
 			return err
@@ -105,7 +112,8 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 					)
 					// Vuelve a enviar el mensaje a la cola
 					if err := h.Utils.SendMessageToQueue(
-						ctx, h.SQSClient, h.SQSClient.GetQueueURL(), messageBodyWithRetry, messageID); err != nil {
+						ctx, h.SQSClient, h.QueueURL, messageBodyWithRetry, messageID); // Usa h.QueueURL en lugar de GetQueueURL()
+					err != nil {
 						h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
 					}
 				} else {
@@ -142,14 +150,15 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 
 				// Enviar el mensaje nuevamente a SQS
 				if err := h.Utils.SendMessageToQueue(
-					ctx, h.SQSClient, h.SQSClient.GetQueueURL(), string(messageBodyWithRetry), messageID); err != nil {
+					ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); // Usa h.QueueURL en lugar de GetQueueURL()
+				err != nil {
 					h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
+					return err
 				}
 			} else {
 				h.Logger.LogError("Se alcanzó el máximo de reintentos", nil, messageID)
 			}
 		}
-
 	}
 	return nil
 }

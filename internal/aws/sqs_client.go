@@ -17,7 +17,6 @@ type SQSAPI interface {
 		ctx context.Context,
 		input *sqs.DeleteMessageInput,
 		opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
-	GetQueueURL() string
 	SendMessage(
 		ctx context.Context,
 		input *sqs.SendMessageInput,
@@ -26,7 +25,7 @@ type SQSAPI interface {
 
 // SQSClient define la estructura del cliente de SQS.
 type SQSClient struct {
-	Client   *sqs.Client
+	Client   SQSAPI
 	QueueURL string
 }
 
@@ -49,7 +48,8 @@ func (s *SQSClient) SendMessage(
 
 // NewSQSClient inicializa un nuevo cliente de SQS.
 func NewSQSClient(
-	queueURL string, loadConfigFunc func(
+	queueURL string,
+	loadConfigFunc func(
 		ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
 	// Validar la URL de la cola
 	if err := validateQueueURL(queueURL); err != nil {
@@ -96,7 +96,7 @@ func getEndpointResolver() aws.EndpointResolver {
 				return aws.Endpoint{}, fmt.Errorf(
 					"unknown endpoint requested for service %s in region %s", service, region)
 			default:
-				return aws.Endpoint{}, fmt.Errorf("unknown APP_ENV: %s", appEnv) // Asegúrate de que esto esté incluido
+				return aws.Endpoint{}, fmt.Errorf("unknown APP_ENV: %s", appEnv)
 			}
 		}
 		return aws.Endpoint{}, fmt.Errorf("unknown service: %s", service)

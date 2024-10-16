@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"gmf_message_processor/internal/models"
 	"testing"
@@ -142,7 +143,7 @@ func TestHandlePlantilla_ErrorSendingEmail(t *testing.T) {
 		"dest@test.com",
 		"Asunto de prueba",
 		"Cuerpo de prueba",
-	).Return(nil)
+	).Return(errors.New("error al enviar el correo"))
 
 	service := NewPlantillaService(repo, emailService)
 
@@ -154,7 +155,123 @@ func TestHandlePlantilla_ErrorSendingEmail(t *testing.T) {
 		"messageID",
 	)
 
-	assert.NoError(t, err, "No debería haber un error cuando la plantilla existe y se envía el correo")
+	assert.Error(t, err)
+	assert.Equal(t, "error al enviar el correo", err.Error())
+
+	repo.AssertExpectations(t)
+	emailService.AssertExpectations(t)
+
+}
+
+func TestHandlePlantilla_ErrorCheckPlantillaExists(t *testing.T) {
+	repo := new(MockPlantillaRepository)
+	emailService := new(MockEmailService)
+
+	// Simular un error al verificar si la plantilla existe
+	repo.On(
+		"CheckPlantillaExists",
+		"PC003").Return(false,
+		(*models.Plantilla)(nil), errors.New("database error"))
+
+	service := NewPlantillaService(repo, emailService)
+
+	err := service.HandlePlantilla(
+		context.TODO(),
+		&models.SQSMessage{
+			IDPlantilla: "PC003",
+		},
+		"messageID",
+	)
+
+	// Verificar que hubo un error y que el repositorio fue llamado
+	assert.Error(t, err)
+	assert.Equal(t, "database error", err.Error())
+	repo.AssertExpectations(t)
+}
+
+func TestHandlePlantilla_WithPlaceholders(t *testing.T) {
+	repo := new(MockPlantillaRepository)
+	emailService := new(MockEmailService)
+
+	// Simular que la plantilla existe en la base de datos
+	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
+		IDPlantilla:  "PC003",
+		Asunto:       "Asunto de prueba",
+		Cuerpo:       "Hola, &nombre!",
+		Remitente:    "test@example.com",
+		Destinatario: "dest@example.com",
+		Adjunto:      false,
+	}, nil)
+
+	// Simular que el envío de correo es exitoso, incluyendo el `messageID` como quinto argumento
+	emailService.On(
+		"SendEmail",
+		"test@example.com",
+		"dest@example.com",
+		"Asunto de prueba",
+		"Hola, Juan!",
+	).Return(nil)
+
+	service := NewPlantillaService(repo, emailService)
+
+	// Llamar a HandlePlantilla con parámetros
+	err := service.HandlePlantilla(
+		context.TODO(),
+		&models.SQSMessage{
+			IDPlantilla: "PC003",
+			Parametro: []models.ParametrosSQS{
+				{Nombre: "nombre", Valor: "Juan"},
+			},
+		},
+		"messageID", // Este es el messageID que debe ser incluido
+	)
+
+	// Verificar que no hubo errores y que el correo fue enviado con los placeholders reemplazados
+	assert.NoError(t, err)
+	repo.AssertExpectations(t)
+	emailService.AssertExpectations(t)
+}
+
+func TestHandlePlantilla_PanicOnErrorSendingEmail(t *testing.T) {
+	repo := new(MockPlantillaRepository)
+	emailService := new(MockEmailService)
+
+	// Simular que la plantilla existe en la base de datos
+	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
+		IDPlantilla:  "PC003",
+		Asunto:       "Asunto de prueba",
+		Cuerpo:       "Hola, &nombre!",
+		Remitente:    "test@example.com",
+		Destinatario: "dest@example.com",
+		Adjunto:      false,
+	}, nil)
+
+	// Simular que el envío de correo falla
+	emailService.On(
+		"SendEmail",
+		"test@example.com",
+		"dest@example.com",
+		"Asunto de prueba",
+		"Hola, Juan!",
+	).Return(errors.New("error al enviar el correo"))
+
+	service := NewPlantillaService(repo, emailService)
+
+	// Llamar a HandlePlantilla con parámetros
+	assert.Panics(t, func() {
+		_ = service.HandlePlantilla(
+			context.TODO(),
+			&models.SQSMessage{
+				IDPlantilla: "PC003",
+				Parametro: []models.ParametrosSQS{
+					{Nombre: "nombre", Valor: "Juan"}, // Simular que se pasan parámetros
+				},
+			},
+			"messageID",
+		)
+	})
+
+	// Verificar que el repositorio y el servicio de correo fueron invocados correctamente
 	repo.AssertExpectations(t)
 	emailService.AssertExpectations(t)
 }

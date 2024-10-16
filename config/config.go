@@ -8,22 +8,28 @@ import (
 )
 
 // Manager ConfigManager maneja la carga de configuración de la aplicación.
-type Manager struct{}
+type Manager struct {
+	Logger   logs.LogInterface
+	FatalfFn func(format string, arg ...interface{})
+}
 
 // NewConfigManager crea una nueva instancia de ConfigManager.
-func NewConfigManager() *Manager {
-	return &Manager{}
+func NewConfigManager(logger logs.LogInterface) *Manager {
+	return &Manager{
+		Logger:   logger,
+		FatalfFn: log.Fatalf,
+	}
 }
 
 // InitConfig inicializa la configuración de la aplicación.
 func (cm *Manager) InitConfig(messageID string) {
 	if err := godotenv.Load(); err != nil {
-		logs.LogDebug(
+		cm.Logger.LogDebug(
 			"Archivo .env no encontrado, se utilizarán las variables de entorno del sistema",
 			messageID,
 		)
 	} else {
-		logs.LogDebug(
+		cm.Logger.LogDebug(
 			"Leyendo variables de entorno desde el archivo .env",
 			messageID,
 		)
@@ -36,7 +42,7 @@ func (cm *Manager) InitConfig(messageID string) {
 	viper.SetConfigFile(".env")
 	viper.SetConfigType("env")
 	if err := viper.ReadInConfig(); err != nil {
-		logs.LogWarn(
+		cm.Logger.LogDebug(
 			"No se pudo cargar el archivo .env, se utilizarán las variables de entorno del sistema",
 			messageID,
 		)
@@ -61,15 +67,8 @@ func (cm *Manager) InitConfig(messageID string) {
 	// Verificar si las variables clave están presentes
 	for _, key := range requiredEnvVars {
 		if !viper.IsSet(key) {
-			logs.LogError("La variable de entorno "+key+" no está configurada", nil, messageID)
-			log.Fatalf("**** Revise la configuración de la aplicación ****")
+			cm.Logger.LogError("La variable de entorno "+key+" no está configurada", nil, messageID)
+			cm.FatalfFn("**** Revise la configuración de la aplicación ****")
 		}
-	}
-}
-
-func setDefault(key, value string, messageID string) {
-	if !viper.IsSet(key) {
-		viper.SetDefault(key, value)
-		logs.LogInfo("Estableciendo valor por defecto para "+key, messageID)
 	}
 }

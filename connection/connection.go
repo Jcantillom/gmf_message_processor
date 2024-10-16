@@ -67,20 +67,15 @@ func (dbm *DBManager) InitDB(messageID string) error {
 	)
 
 	// Abrir la conexión a la base de datos usando GORM
-	if err := dbm.openConnection(dsn, newLogger, messageID); err != nil {
+	if err := dbm.openConnection(postgres.Open(dsn), newLogger, messageID); err != nil {
 		return err
 	}
-
-	// Loguear el éxito de la conexión a la base de datos
-	logs.LogDebug("Conexión a la base de datos establecida", messageID)
-
 	return nil
 }
 
-// openConnection establece la conexión a la base de datos.
-func (dbm *DBManager) openConnection(dsn string, logger logger.Interface, messageID string) error {
+func (dbm *DBManager) openConnection(dialector gorm.Dialector, logger logger.Interface, messageID string) error {
 	var err error
-	dbm.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+	dbm.DB, err = gorm.Open(dialector, &gorm.Config{
 		Logger: logger,
 	})
 	if err != nil {

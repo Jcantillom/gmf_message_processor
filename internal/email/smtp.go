@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+// EmailServiceInterface define los métodos que debe implementar un servicio de correo electrónico.
+type EmailServiceInterface interface {
+	SendEmail(remitente, destinatarios, asunto, cuerpo, messageID string) error
+}
+
 var ctx = context.TODO()
 
 // SMTPEmailService implementa EmailService utilizando SMTP.

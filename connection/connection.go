@@ -3,14 +3,11 @@ package connection
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
-	"time"
-
 	"gmf_message_processor/internal/logs"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"os"
 )
 
 var ctx = context.TODO()
@@ -26,18 +23,19 @@ type DBManagerInterface interface {
 type DBManager struct {
 	DB            *gorm.DB
 	SecretService SecretService
+	Logger        logger.Interface
 }
 
 // NewDBManager crea una nueva instancia de DBManager.
-func NewDBManager(service SecretService) *DBManager {
+func NewDBManager(service SecretService, logger logger.Interface) *DBManager {
 	return &DBManager{
 		SecretService: service,
+		Logger:        logger,
 	}
 }
 
 // InitDB inicializa la conexión a la base de datos y realiza migraciones.
 func (dbm *DBManager) InitDB(messageID string) error {
-	// Obtener el secreto
 	secretName := os.Getenv("SECRETS_DB")
 	secretData, err := dbm.SecretService.GetSecret(secretName, messageID)
 	if err != nil {
@@ -45,8 +43,16 @@ func (dbm *DBManager) InitDB(messageID string) error {
 		return fmt.Errorf("error al obtener el secreto: %w", err)
 	}
 
-	// Construir el Data Source Name (DSN)
-	dsn := fmt.Sprintf(
+	dsn := buildDSN(secretData)
+	if err := dbm.openConnection(postgres.Open(dsn), dbm.Logger, messageID); err != nil {
+		return fmt.Errorf("error al abrir la conexión: %w", err)
+	}
+	return nil
+}
+
+// buildDSN construye el DSN de la base de datos.
+func buildDSN(secretData *SecretData) string {
+	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
@@ -54,30 +60,12 @@ func (dbm *DBManager) InitDB(messageID string) error {
 		secretData.Password,
 		os.Getenv("DB_NAME"),
 	)
-
-	// Configurar el logger de GORM
-	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Warn,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  true,
-		},
-	)
-
-	// Abrir la conexión a la base de datos usando GORM
-	if err := dbm.openConnection(postgres.Open(dsn), newLogger, messageID); err != nil {
-		return err
-	}
-	return nil
 }
 
+// openConnection abre la conexión con la base de datos.
 func (dbm *DBManager) openConnection(dialector gorm.Dialector, logger logger.Interface, messageID string) error {
 	var err error
-	dbm.DB, err = gorm.Open(dialector, &gorm.Config{
-		Logger: logger,
-	})
+	dbm.DB, err = gorm.Open(dialector, &gorm.Config{Logger: logger})
 	if err != nil {
 		logs.LogError("Error al abrir la conexión a la base de datos", err, messageID)
 		return fmt.Errorf("error al abrir la conexión a la base de datos: %w", err)
@@ -93,7 +81,6 @@ func (dbm *DBManager) GetDB() *gorm.DB {
 // CloseDB cierra la conexión a la base de datos.
 func (dbm *DBManager) CloseDB(messageID string) {
 	if dbm.DB == nil {
-		// Si la conexión no ha sido inicializada, no intentamos cerrarla
 		logs.LogWarn("La conexión a la base de datos no ha sido inicializada", messageID)
 		return
 	}

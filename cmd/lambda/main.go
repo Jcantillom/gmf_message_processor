@@ -9,14 +9,28 @@ import (
 	"gmf_message_processor/connection"
 	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/local"
+	"gorm.io/gorm/logger"
+	"log"
 	"os"
+	"time"
 )
 
 func main() {
 	// Inicializar servicios
 	secretService := connection.NewSecretService()
+
+	// Crear un logger de GORM
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  logger.Warn, // Cambia el nivel según necesites
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		},
+	)
 	// Inicializar el DBManager
-	dbManager := connection.NewDBManager(secretService)
+	dbManager := connection.NewDBManager(secretService, newLogger)
 
 	// Inicializar la aplicación
 	appContext, err := config.InitApplication(

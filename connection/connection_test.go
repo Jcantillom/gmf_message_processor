@@ -223,7 +223,7 @@ func TestDBManager_OpenConnectionError(t *testing.T) {
 	mockSecretService.On("GetSecret", "some_secret", "testMessageID").
 		Return(&SecretData{Username: "dbuser", Password: "dbpassword"}, nil)
 
-	dbManager := NewDBManager(mockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
 
 	// Mockear la variable de entorno DB_HOST incorrectamente para que falle la conexión
 	os.Setenv("DB_HOST", "invalid_host")
@@ -255,7 +255,7 @@ func TestDBManager_InitDB_SecretError(t *testing.T) {
 	mockSecretService.On("GetSecret", "some_secret", "testMessageID").
 		Return(nil, errors.New("error al obtener el secreto"))
 
-	dbManager := NewDBManager(mockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
 
 	// Intentar inicializar la base de datos
 	err := dbManager.InitDB("testMessageID")
@@ -345,7 +345,7 @@ func TestGetSecret_EmptySecretName(t *testing.T) {
 
 func TestDBManager_GetDB(t *testing.T) {
 	mockSecretService := new(MockSecretService)
-	dbManager := NewDBManager(mockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
 
 	// Simular la conexión a la base de datos
 	mockDB := &gorm.DB{}
@@ -358,7 +358,7 @@ func TestDBManager_GetDB(t *testing.T) {
 
 func TestDBManager_CloseDB_NotInitialized(t *testing.T) {
 	mockSecretService := new(MockSecretService)
-	dbManager := NewDBManager(mockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
 
 	// Simular que la conexión no está inicializada
 	dbManager.DB = nil
@@ -394,7 +394,7 @@ func TestGetSecret_NullSecretString(t *testing.T) {
 
 func TestNewDBManager(t *testing.T) {
 	mockService := new(MockSecretService)
-	dbManager := NewDBManager(mockService)
+	dbManager := NewDBManager(mockService, nil)
 
 	// Verificar que la instancia de DBManager no sea nula
 	assert.NotNil(t, dbManager)
@@ -427,7 +427,7 @@ func TestDBManager_InitDB_Success(t *testing.T) {
 		Return(&SecretData{Username: "testuser", Password: "testpassword"}, nil)
 
 	// Crear una instancia de DBManager
-	dbManager := NewDBManager(mockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
 
 	// Crear un mock de SQL usando sqlmock
 	mockDB, mock, err := sqlmock.New()

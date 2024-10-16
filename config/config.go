@@ -62,6 +62,7 @@ func (cm *Manager) InitConfig(messageID string) {
 		"SMTP_PORT",
 		"SQS_QUEUE_URL",
 		"SMTP_TIMEOUT",
+		"AWS_REGION",
 	}
 
 	// Verificar si las variables clave están presentes

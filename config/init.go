@@ -127,12 +127,37 @@ func getSecret(
 	return secret, nil
 }
 
-// initializeSQSClient inicializa el cliente de SQS
+// initializeSQSClient inicializa el cliente de SQS, permitiendo la configuración del endpoint.
 func initializeSQSClient(messageID string) (internalAws.SQSAPI, error) {
-	loadConfigFunc := func(ctx context.Context, optFns ...func(*awsConfig.LoadOptions) error) (aws.Config, error) {
-		return awsConfig.LoadDefaultConfig(ctx, optFns...)
+	// Verificar si estamos utilizando LocalStack o AWS real
+	endpoint := viper.GetString("SQS_ENDPOINT") // Usar esta variable si tienes un endpoint personalizado
+	region := viper.GetString("AWS_REGION")
+
+	if region == "" {
+		region = "us-east-1" // Valor por defecto
 	}
 
+	loadConfigFunc := func(ctx context.Context, optFns ...func(*awsConfig.LoadOptions) error) (aws.Config, error) {
+		options := []func(*awsConfig.LoadOptions) error{
+			awsConfig.WithRegion(region),
+		}
+
+		// Si se proporciona un endpoint (por ejemplo, para LocalStack), lo agregamos
+		if endpoint != "" {
+			options = append(options, awsConfig.WithEndpointResolver(
+				aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+					return aws.Endpoint{
+						URL:           endpoint,
+						SigningRegion: region,
+					}, nil
+				}),
+			))
+		}
+
+		return awsConfig.LoadDefaultConfig(ctx, options...)
+	}
+
+	// Inicializar el cliente SQS
 	sqsClient, err := internalAws.NewSQSClient(viper.GetString("SQS_QUEUE_URL"), loadConfigFunc)
 	if err != nil {
 		logs.LogError("Error inicializando SQS Client", err, messageID)

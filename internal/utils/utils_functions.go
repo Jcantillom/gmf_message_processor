@@ -85,6 +85,14 @@ func (u *Utils) SendMessageToQueue(
 			return err
 		}
 	}
+	// Formatear el mensaje como JSON bonito para impresión
+	//var prettyJSON bytes.Buffer
+	//if err := json.Indent(&prettyJSON, []byte(messageBody), "", "  "); err != nil {
+	//	logs.LogError("Error al formatear el mensaje como JSON", err, messageID)
+	//	return err
+	//}
+	//fmt.Printf("Mensaje a enviar a SQS:\n%s\n", prettyJSON.String())
+
 	_, err := client.SendMessage(ctx, &sqs.SendMessageInput{
 		QueueUrl:     &queueURL,
 		MessageBody:  &messageBody,

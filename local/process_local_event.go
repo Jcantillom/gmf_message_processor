@@ -36,7 +36,7 @@ func ReadSQSEventFromFile(fileReader FileReaderFunc) (*events.SQSEvent, error) {
 	}
 
 	// Imprimir el evento SQS en formato JSON con sangría
-	PrintEvent(sqsEvent)
+	//PrintEvent(sqsEvent)
 
 	return &sqsEvent, nil
 }

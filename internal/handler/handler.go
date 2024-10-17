@@ -107,16 +107,27 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 						"Reintentando el mensaje. Conteo actual: %d", validMsg.RetryCount), messageID)
 
 					// Preparar el nuevo cuerpo del mensaje con el contador de reintentos
-					messageBodyWithRetry := fmt.Sprintf(
-						"{\"id_plantilla\": \"%s\", \"parametros\": %s, \"retry_count\": %d}",
-						validMsg.IDPlantilla,
-						validMsg.Parametro,
-						validMsg.RetryCount,
-					)
-					// Vuelve a enviar el mensaje a la cola
+					messageBodyWithRetry, err := json.Marshal(struct {
+						IDPlantilla string                 `json:"id_plantilla"`
+						Parametros  []models.ParametrosSQS `json:"parametros"`
+						RetryCount  int                    `json:"retry_count"`
+					}{
+						IDPlantilla: validMsg.IDPlantilla,
+						Parametros:  validMsg.Parametro,
+						RetryCount:  validMsg.RetryCount,
+					})
+
+					if err != nil {
+						h.Logger.LogError("Error al convertir el mensaje a JSON", err, messageID)
+						return
+					}
+
+					// Imprimir el mensaje con el reintento para verificar su contenido
+					fmt.Printf("Mensaje con reintento:\n%s\n", string(messageBodyWithRetry))
+
+					// Enviar el mensaje nuevamente a SQS
 					if err := h.Utils.SendMessageToQueue(
-						ctx, h.SQSClient, h.QueueURL, messageBodyWithRetry, messageID); // Usa h.QueueURL en lugar de GetQueueURL()
-					err != nil {
+						ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); err != nil {
 						h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
 					}
 				} else {
@@ -146,15 +157,19 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 					Parametros:  validMsg.Parametro,
 					RetryCount:  validMsg.RetryCount,
 				})
+				fmt.Printf("Contenido de Parametros: %+v\n", validMsg.Parametro)
+
 				if err != nil {
 					h.Logger.LogError("Error al convertir el mensaje a JSON", err, messageID)
 					return err
 				}
 
+				// Imprimir el JSON del mensaje para verificar su contenido
+				fmt.Printf("Mensaje con reintento:\n%s\n", string(messageBodyWithRetry))
+
 				// Enviar el mensaje nuevamente a SQS
 				if err := h.Utils.SendMessageToQueue(
-					ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); // Usa h.QueueURL en lugar de GetQueueURL()
-				err != nil {
+					ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); err != nil {
 					h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
 					return err
 				}
@@ -173,5 +188,5 @@ func printSQSEvent(sqsEvent events.SQSEvent) {
 		fmt.Printf("Error al convertir el evento a JSON: %v\n", err)
 		return
 	}
-	fmt.Printf("Evento SQS completo:\n%s\n", string(eventJSON))
+	fmt.Printf("\n--- Evento SQS recibido ---\n%s\n--- Fin del evento ---\n", string(eventJSON))
 }

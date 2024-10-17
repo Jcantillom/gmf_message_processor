@@ -21,7 +21,7 @@ type Plantilla struct {
 // TableName devuelve el nombre de la tabla para el modelo Plantilla.
 func (Plantilla) TableName() string {
 	schema := os.Getenv("DB_SCHEMA")
-	if schema == "" {
+	if schema == "" || schema == "public" {
 		return "cgd_correos_plantillas"
 	}
 	return fmt.Sprintf("%s.cgd_correos_plantillas", schema)

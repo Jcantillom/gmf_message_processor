@@ -52,13 +52,18 @@ func (dbm *DBManager) InitDB(messageID string) error {
 
 // buildDSN construye el DSN de la base de datos.
 func buildDSN(secretData *SecretData) string {
+	sslMode := os.Getenv("DB_SSLMODE")
+	if sslMode == "" {
+		sslMode = "require"
+	}
 	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
 		secretData.Username,
 		secretData.Password,
 		os.Getenv("DB_NAME"),
+		sslMode,
 	)
 }
 

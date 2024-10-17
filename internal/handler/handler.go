@@ -71,6 +71,9 @@ func NewSQSHandler(
 
 // HandleLambdaEvent ...
 func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error {
+
+	// Imprimir el evento SQS completo con formato JSON
+	printSQSEvent(sqsEvent)
 	for _, record := range sqsEvent.Records {
 		messageID := record.MessageId
 
@@ -161,4 +164,14 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 		}
 	}
 	return nil
+}
+
+// printSQSEvent...
+func printSQSEvent(sqsEvent events.SQSEvent) {
+	eventJSON, err := json.MarshalIndent(sqsEvent, "", "  ")
+	if err != nil {
+		fmt.Printf("Error al convertir el evento a JSON: %v\n", err)
+		return
+	}
+	fmt.Printf("Evento SQS completo:\n%s\n", string(eventJSON))
 }

@@ -35,7 +35,20 @@ func ReadSQSEventFromFile(fileReader FileReaderFunc) (*events.SQSEvent, error) {
 		return nil, err
 	}
 
+	// Imprimir el evento SQS en formato JSON con sangría
+	PrintEvent(sqsEvent)
+
 	return &sqsEvent, nil
+}
+
+// PrintEvent imprime el evento SQS en formato JSON con sangría.
+func PrintEvent(event events.SQSEvent) {
+	eventJSON, err := json.MarshalIndent(event, "", "  ")
+	if err != nil {
+		fmt.Printf("Error al convertir el evento a JSON: %v\n", err)
+		return
+	}
+	fmt.Printf("Evento SQS recibido:\n%s\n", string(eventJSON))
 }
 
 func ProcessLocalEvent(

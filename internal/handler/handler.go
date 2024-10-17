@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"gmf_message_processor/internal/aws"
+	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
 	"gmf_message_processor/internal/utils"
+	"strings"
 )
 
 // SQSHandlerInterface ...
@@ -50,7 +52,7 @@ type SQSHandler struct {
 	SQSClient        aws.SQSAPI
 	Utils            UtilsInterface
 	Logger           LogInterface
-	QueueURL         string // Nueva propiedad para almacenar la URL de la cola
+	QueueURL         string
 }
 
 // NewSQSHandler ...
@@ -59,20 +61,19 @@ func NewSQSHandler(
 	sqsClient aws.SQSAPI,
 	utils UtilsInterface,
 	logger LogInterface,
-	queueURL string) *SQSHandler { // Recibe la QueueURL como parámetro
+	queueURL string) *SQSHandler {
 	return &SQSHandler{
 		PlantillaService: plantillaService,
 		SQSClient:        sqsClient,
 		Utils:            utils,
 		Logger:           logger,
-		QueueURL:         queueURL, // Asigna la URL de la cola
+		QueueURL:         queueURL,
 	}
 }
 
 // HandleLambdaEvent ...
 func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error {
 
-	// Imprimir el evento SQS completo con formato JSON
 	printSQSEvent(sqsEvent)
 	for _, record := range sqsEvent.Records {
 		messageID := record.MessageId
@@ -139,7 +140,6 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 		if err := h.PlantillaService.HandlePlantilla(ctx, validMsg, messageID); err != nil {
 			h.Logger.LogError("Error al procesar el mensaje", err, messageID)
 
-			// Aumentar el contador de reintentos
 			validMsg.RetryCount++ // aumentar el contador de reintentos
 
 			// Comprobar si no excede el máximo permitido
@@ -157,15 +157,11 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 					Parametros:  validMsg.Parametro,
 					RetryCount:  validMsg.RetryCount,
 				})
-				fmt.Printf("Contenido de Parametros: %+v\n", validMsg.Parametro)
 
 				if err != nil {
 					h.Logger.LogError("Error al convertir el mensaje a JSON", err, messageID)
 					return err
 				}
-
-				// Imprimir el JSON del mensaje para verificar su contenido
-				fmt.Printf("Mensaje con reintento:\n%s\n", string(messageBodyWithRetry))
 
 				// Enviar el mensaje nuevamente a SQS
 				if err := h.Utils.SendMessageToQueue(
@@ -181,12 +177,16 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 	return nil
 }
 
-// printSQSEvent...
+// printSQSEvent imprime el evento SQS eliminando saltos de línea.
 func printSQSEvent(sqsEvent events.SQSEvent) {
 	eventJSON, err := json.MarshalIndent(sqsEvent, "", "  ")
 	if err != nil {
 		fmt.Printf("Error al convertir el evento a JSON: %v\n", err)
 		return
 	}
-	fmt.Printf("\n--- Evento SQS recibido ---\n%s\n--- Fin del evento ---\n", string(eventJSON))
+
+	singleLineJSON := strings.ReplaceAll(string(eventJSON), "\n", " ")
+
+	// Imprimir en un solo log
+	logs.LogDebug(fmt.Sprintf("--- Evento SQS --- %s --- Fin del Evento SQS ---", singleLineJSON), "")
 }

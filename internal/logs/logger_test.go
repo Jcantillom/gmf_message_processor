@@ -154,7 +154,7 @@ func TestLoggerAdapter_LogDebug(t *testing.T) {
 
 func TestLogMessageWithoutMessageID(t *testing.T) {
 	output := captureOutput(func() {
-		logMessage(Green, "INFO", "Este es un mensaje de información", "")
+		logMessage("INFO", "Este es un mensaje de información", "")
 	})
 
 	expected := "INFO"
@@ -169,7 +169,7 @@ func TestLogMessageWithoutMessageID(t *testing.T) {
 
 func TestLogMessageWithMessageID(t *testing.T) {
 	output := captureOutput(func() {
-		logMessage(Green, "INFO", "Este es un mensaje de información", "messageID")
+		logMessage("INFO", "Este es un mensaje de información", "messageID")
 	})
 
 	expected := "[MessageId: messageID]"

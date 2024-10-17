@@ -130,11 +130,11 @@ func getSecret(
 // initializeSQSClient inicializa el cliente de SQS, permitiendo la configuración del endpoint.
 func initializeSQSClient(messageID string) (internalAws.SQSAPI, error) {
 	// Verificar si estamos utilizando LocalStack o AWS real
-	endpoint := viper.GetString("SQS_ENDPOINT") // Usar esta variable si tienes un endpoint personalizado
+	endpoint := viper.GetString("SQS_ENDPOINT")
 	region := viper.GetString("AWS_REGION")
 
 	if region == "" {
-		region = "us-east-1" // Valor por defecto
+		region = "us-east-1" // Región por defecto
 	}
 
 	loadConfigFunc := func(ctx context.Context, optFns ...func(*awsConfig.LoadOptions) error) (aws.Config, error) {

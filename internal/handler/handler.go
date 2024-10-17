@@ -108,6 +108,8 @@ func (h *SQSHandler) handleRecovery(validMsg *models.SQSMessage, messageID strin
 	}
 }
 
+var jsonMarshal = json.Marshal
+
 // Reintenta el envío de un mensaje a SQS
 func (h *SQSHandler) retryMessage(ctx context.Context, msg *models.SQSMessage, messageID string, err error) error {
 	if err != nil {
@@ -122,7 +124,7 @@ func (h *SQSHandler) retryMessage(ctx context.Context, msg *models.SQSMessage, m
 
 	h.Logger.LogInfo(fmt.Sprintf("Reintentando el mensaje. Conteo actual: %d", msg.RetryCount), messageID)
 
-	messageBodyWithRetry, err := json.Marshal(msg)
+	messageBodyWithRetry, err := jsonMarshal(msg)
 	if err != nil {
 		return fmt.Errorf("Error convirtiendo mensaje a JSON: %w", err)
 	}
@@ -133,13 +135,18 @@ func (h *SQSHandler) retryMessage(ctx context.Context, msg *models.SQSMessage, m
 	return nil
 }
 
+// En handler.go
+var jsonMarshalIndent = json.MarshalIndent
+var logDebug = logs.LogDebug
+
 func printSQSEvent(sqsEvent events.SQSEvent) {
-	eventJSON, err := json.MarshalIndent(sqsEvent, "", "  ")
+	eventJSON, err := jsonMarshalIndent(sqsEvent, "", "  ") // Usamos el wrapper aquí
 	if err != nil {
-		logs.LogDebug(fmt.Sprintf("Error al convertir el evento a JSON: %v", err), "")
+		logDebug(fmt.Sprintf("Error al convertir el evento a JSON: %v", err), "")
 		return
 	}
 
 	singleLineJSON := strings.ReplaceAll(string(eventJSON), "\n", " ")
-	logs.LogDebug(fmt.Sprintf("--- Evento SQS --- %s --- Fin del Evento SQS ---", singleLineJSON), "")
+	logDebug(
+		fmt.Sprintf("--- Evento SQS --- %s --- Fin del Evento SQS ---", singleLineJSON), "")
 }

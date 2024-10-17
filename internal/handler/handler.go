@@ -12,41 +12,28 @@ import (
 	"strings"
 )
 
-// SQSHandlerInterface ...
+// Interfaces para inyección de dependencias
 type SQSHandlerInterface interface {
 	HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error
 }
 
-// LogInterface ...
 type LogInterface interface {
 	LogError(message string, err error, messageID string)
 	LogInfo(message, messageID string)
 }
 
-// PlantillaServiceInterface ...
 type PlantillaServiceInterface interface {
 	HandlePlantilla(ctx context.Context, msg *models.SQSMessage, messageID string) error
 }
 
-// UtilsInterface ...
 type UtilsInterface interface {
 	ExtractMessageBody(body, messageID string) (string, error)
 	ValidateSQSMessage(messageBody string) (*models.SQSMessage, error)
-	DeleteMessageFromQueue(
-		ctx context.Context,
-		client aws.SQSAPI,
-		queueURL string,
-		receiptHandle *string,
-		messageID string) error
-	SendMessageToQueue(
-		ctx context.Context,
-		client aws.SQSAPI,
-		queueURL string,
-		messageBody string,
-		messageID string) error
+	DeleteMessageFromQueue(ctx context.Context, client aws.SQSAPI, queueURL string, receiptHandle *string, messageID string) error
+	SendMessageToQueue(ctx context.Context, client aws.SQSAPI, queueURL, messageBody, messageID string) error
 }
 
-// SQSHandler ...
+// Estructura principal del manejador
 type SQSHandler struct {
 	PlantillaService PlantillaServiceInterface
 	SQSClient        aws.SQSAPI
@@ -55,13 +42,14 @@ type SQSHandler struct {
 	QueueURL         string
 }
 
-// NewSQSHandler ...
+// Constructor del manejador
 func NewSQSHandler(
 	plantillaService PlantillaServiceInterface,
 	sqsClient aws.SQSAPI,
 	utils UtilsInterface,
 	logger LogInterface,
-	queueURL string) *SQSHandler {
+	queueURL string,
+) *SQSHandler {
 	return &SQSHandler{
 		PlantillaService: plantillaService,
 		SQSClient:        sqsClient,
@@ -71,119 +59,87 @@ func NewSQSHandler(
 	}
 }
 
-// HandleLambdaEvent ...
+// Función principal que maneja el evento Lambda
 func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error {
-
+	//imprime el evento
 	printSQSEvent(sqsEvent)
 	for _, record := range sqsEvent.Records {
 		messageID := record.MessageId
 
-		messageBody, err := h.Utils.ExtractMessageBody(record.Body, messageID)
-		if err != nil {
-			h.Logger.LogError("Error extrayendo el cuerpo del mensaje", err, messageID)
+		if err := h.processMessage(ctx, record, messageID); err != nil {
+			h.Logger.LogError("Error procesando el mensaje", err, messageID)
 			return err
-		}
-
-		validMsg, err := h.Utils.ValidateSQSMessage(messageBody)
-		if err != nil {
-			h.Logger.LogError("Error validando el mensaje", err, messageID)
-			return err
-		}
-
-		// Eliminar el mensaje de SQS antes de procesarlo
-		err = h.Utils.DeleteMessageFromQueue(
-			ctx, h.SQSClient, h.QueueURL, &record.ReceiptHandle, messageID) // Usa h.QueueURL en lugar de GetQueueURL()
-		if err != nil {
-			h.Logger.LogError("Error al eliminar el mensaje de SQS", err, messageID)
-			return err
-		}
-
-		// Manejar el procesamiento dentro de un bloque de recuperación
-		defer func() {
-			if r := recover(); r != nil {
-				h.Logger.LogError("Error al procesar el mensaje", fmt.Errorf("%v", r), messageID)
-				validMsg.RetryCount++
-				if validMsg.RetryCount <= utils.GetMaxRetries() {
-					h.Logger.LogInfo(fmt.Sprintf(
-						"Reintentando el mensaje. Conteo actual: %d", validMsg.RetryCount), messageID)
-
-					// Preparar el nuevo cuerpo del mensaje con el contador de reintentos
-					messageBodyWithRetry, err := json.Marshal(struct {
-						IDPlantilla string                 `json:"id_plantilla"`
-						Parametros  []models.ParametrosSQS `json:"parametros"`
-						RetryCount  int                    `json:"retry_count"`
-					}{
-						IDPlantilla: validMsg.IDPlantilla,
-						Parametros:  validMsg.Parametro,
-						RetryCount:  validMsg.RetryCount,
-					})
-
-					if err != nil {
-						h.Logger.LogError("Error al convertir el mensaje a JSON", err, messageID)
-						return
-					}
-
-					// Enviar el mensaje nuevamente a SQS
-					if err := h.Utils.SendMessageToQueue(
-						ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); err != nil {
-						h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
-					}
-				} else {
-					h.Logger.LogError("Se alcanzó el máximo de reintentos", nil, messageID)
-				}
-			}
-		}()
-
-		if err := h.PlantillaService.HandlePlantilla(ctx, validMsg, messageID); err != nil {
-			h.Logger.LogError("Error al procesar el mensaje", err, messageID)
-
-			validMsg.RetryCount++ // aumentar el contador de reintentos
-
-			// Comprobar si no excede el máximo permitido
-			if validMsg.RetryCount <= utils.GetMaxRetries() {
-				h.Logger.LogInfo(fmt.Sprintf(
-					"Reintentando el mensaje. Conteo actual: %d", validMsg.RetryCount), messageID)
-
-				// Preparar el nuevo cuerpo del mensaje con el contador de reintentos
-				messageBodyWithRetry, err := json.Marshal(struct {
-					IDPlantilla string                 `json:"id_plantilla"`
-					Parametros  []models.ParametrosSQS `json:"parametros"`
-					RetryCount  int                    `json:"retry_count"`
-				}{
-					IDPlantilla: validMsg.IDPlantilla,
-					Parametros:  validMsg.Parametro,
-					RetryCount:  validMsg.RetryCount,
-				})
-
-				if err != nil {
-					h.Logger.LogError("Error al convertir el mensaje a JSON", err, messageID)
-					return err
-				}
-
-				// Enviar el mensaje nuevamente a SQS
-				if err := h.Utils.SendMessageToQueue(
-					ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); err != nil {
-					h.Logger.LogError("Error al reenviar el mensaje a SQS", err, messageID)
-					return err
-				}
-			} else {
-				h.Logger.LogError("Se alcanzó el máximo de reintentos", nil, messageID)
-			}
 		}
 	}
 	return nil
 }
 
-// printSQSEvent imprime el evento SQS eliminando saltos de línea.
+// Procesa un mensaje individual
+func (h *SQSHandler) processMessage(ctx context.Context, record events.SQSMessage, messageID string) error {
+	// Elimina el mensaje de la cola inmediatamente antes de iniciar el procesamiento
+	if err := h.Utils.DeleteMessageFromQueue(
+		ctx, h.SQSClient, h.QueueURL, &record.ReceiptHandle, messageID); err != nil {
+		return fmt.Errorf("Error eliminando mensaje de SQS: %w", err)
+	}
+
+	messageBody, err := h.Utils.ExtractMessageBody(record.Body, messageID)
+	if err != nil {
+		return fmt.Errorf("Error extrayendo cuerpo del mensaje: %w", err)
+	}
+
+	validMsg, err := h.Utils.ValidateSQSMessage(messageBody)
+	if err != nil {
+		return fmt.Errorf("Error validando mensaje: %w", err)
+	}
+
+	defer h.handleRecovery(validMsg, messageID)
+
+	if err := h.PlantillaService.HandlePlantilla(ctx, validMsg, messageID); err != nil {
+		return h.retryMessage(ctx, validMsg, messageID, err)
+	}
+	return nil
+}
+
+// Maneja la recuperación en caso de panic
+func (h *SQSHandler) handleRecovery(validMsg *models.SQSMessage, messageID string) {
+	if r := recover(); r != nil {
+		h.Logger.LogError("Error al procesar el mensaje", fmt.Errorf("%v", r), messageID)
+		h.retryMessage(context.Background(), validMsg, messageID, nil)
+	}
+}
+
+// Reintenta el envío de un mensaje a SQS
+func (h *SQSHandler) retryMessage(ctx context.Context, msg *models.SQSMessage, messageID string, err error) error {
+	if err != nil {
+		h.Logger.LogError("Error al procesar el mensaje", err, messageID)
+	}
+
+	msg.RetryCount++
+	if msg.RetryCount > utils.GetMaxRetries() {
+		h.Logger.LogError("Se alcanzó el máximo de reintentos", nil, messageID)
+		return nil
+	}
+
+	h.Logger.LogInfo(fmt.Sprintf("Reintentando el mensaje. Conteo actual: %d", msg.RetryCount), messageID)
+
+	messageBodyWithRetry, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("Error convirtiendo mensaje a JSON: %w", err)
+	}
+
+	if err := h.Utils.SendMessageToQueue(ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); err != nil {
+		return fmt.Errorf("Error reenviando mensaje a SQS: %w", err)
+	}
+	return nil
+}
+
 func printSQSEvent(sqsEvent events.SQSEvent) {
 	eventJSON, err := json.MarshalIndent(sqsEvent, "", "  ")
 	if err != nil {
-		fmt.Printf("Error al convertir el evento a JSON: %v\n", err)
+		logs.LogDebug(fmt.Sprintf("Error al convertir el evento a JSON: %v", err), "")
 		return
 	}
 
 	singleLineJSON := strings.ReplaceAll(string(eventJSON), "\n", " ")
-
-	// Imprimir en un solo log
 	logs.LogDebug(fmt.Sprintf("--- Evento SQS --- %s --- Fin del Evento SQS ---", singleLineJSON), "")
 }

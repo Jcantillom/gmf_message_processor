@@ -123,9 +123,6 @@ func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSE
 						return
 					}
 
-					// Imprimir el mensaje con el reintento para verificar su contenido
-					fmt.Printf("Mensaje con reintento:\n%s\n", string(messageBodyWithRetry))
-
 					// Enviar el mensaje nuevamente a SQS
 					if err := h.Utils.SendMessageToQueue(
 						ctx, h.SQSClient, h.QueueURL, string(messageBodyWithRetry), messageID); err != nil {

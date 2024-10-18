@@ -33,26 +33,38 @@ func (m *MockEmailService) SendEmail(
 	return args.Error(0)
 }
 
-func TestHandlePlantilla_InvalidParameters(t *testing.T) {
+const (
+	asuntoPrueba  = "Asunto de prueba"
+	cuerpoPrueba  = "Cuerpo de prueba"
+	remitente     = "test@example.com"
+	destinatario  = "dest@example.com"
+	destinatario2 = "dest@test.com"
+	mensajeError  = "error al enviar el correo"
+)
+
+func TestHandlePlantillaInvalidParameters(t *testing.T) {
 	// Mock del repositorio para que devuelva una plantilla válida
 	repo := new(MockPlantillaRepository)
 	emailService := new(MockEmailService)
 
-	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
+	repo.On(
+		"CheckPlantillaExists",
+		"PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
-		Asunto:       "Asunto de prueba",
-		Cuerpo:       "Cuerpo de prueba",
-		Remitente:    "test@example.com",
-		Destinatario: "dest@example.com",
+		Asunto:       asuntoPrueba,
+		Cuerpo:       cuerpoPrueba,
+		Remitente:    remitente,
+		Destinatario: destinatario,
 		Adjunto:      false,
 	}, nil)
 
 	// Mock del servicio de email para que devuelva un error
 	emailService.On(
 		"SendEmail",
-		"test@example.com",
-		"dest@example.com", "Asunto de prueba",
-		"Cuerpo de prueba").Return(nil)
+		remitente,
+		destinatario,
+		asuntoPrueba,
+		cuerpoPrueba).Return(nil)
 
 	// crear una nueva instancia de Service
 	service := NewPlantillaService(repo, emailService)
@@ -65,7 +77,8 @@ func TestHandlePlantilla_InvalidParameters(t *testing.T) {
 		},
 		"messageID",
 	)
-	assert.NoError(t, err, "No debería haber un error cuando no se proporcionan parámetros")
+	assert.NoError(
+		t, err, "No debería haber un error cuando no se proporcionan parámetros")
 
 	// Verificar que el repositorio y el servicio de correo fueron invocados correctamente
 	repo.AssertExpectations(t)
@@ -73,9 +86,12 @@ func TestHandlePlantilla_InvalidParameters(t *testing.T) {
 
 }
 
-func TestHandlePlantilla_PlantillaNotFound(t *testing.T) {
+func TestHandlePlantillaPlantillaNotFound(t *testing.T) {
 	repo := new(MockPlantillaRepository)
-	repo.On("CheckPlantillaExists", "PC003").Return(false, (*models.Plantilla)(nil), nil)
+	repo.On(
+		"CheckPlantillaExists",
+		"PC003").
+		Return(false, (*models.Plantilla)(nil), nil)
 
 	service := NewPlantillaService(repo, nil)
 
@@ -86,27 +102,30 @@ func TestHandlePlantilla_PlantillaNotFound(t *testing.T) {
 		},
 		"messageID",
 	)
-	assert.Error(t, err, "Debería haber un error cuando la plantilla no existe en la base de datos")
+	assert.Error(
+		t, err,
+		"Debería haber un error cuando la plantilla no existe en la base de datos",
+	)
 	repo.AssertExpectations(t)
 }
 
-func TestHandlePlantilla_Success(t *testing.T) {
+func TestHandlePlantillaSuccess(t *testing.T) {
 	repo := new(MockPlantillaRepository)
 	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
-		Asunto:       "Asunto de prueba",
-		Cuerpo:       "Cuerpo de prueba",
-		Remitente:    "test@test.com",
-		Destinatario: "dest@test.com",
+		Asunto:       asuntoPrueba,
+		Cuerpo:       cuerpoPrueba,
+		Remitente:    remitente,
+		Destinatario: destinatario2,
 		Adjunto:      false,
 	}, nil)
 
 	emailService := new(MockEmailService)
 	emailService.On(
 		"SendEmail",
-		"test@test.com",
+		remitente,
 		"dest@test.com",
-		"Asunto de prueba",
+		asuntoPrueba,
 		"Cuerpo de prueba",
 	).Return(nil)
 
@@ -120,30 +139,33 @@ func TestHandlePlantilla_Success(t *testing.T) {
 		"messageID",
 	)
 
-	assert.NoError(t, err, "No debería haber un error cuando la plantilla existe y se envía el correo")
+	assert.NoError(
+		t,
+		err,
+		"No debería haber un error cuando la plantilla existe y se envía el correo")
 	repo.AssertExpectations(t)
 	emailService.AssertExpectations(t)
 }
 
-func TestHandlePlantilla_ErrorSendingEmail(t *testing.T) {
+func TestHandlePlantillaErrorSendingEmail(t *testing.T) {
 	repo := new(MockPlantillaRepository)
 	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
-		Asunto:       "Asunto de prueba",
-		Cuerpo:       "Cuerpo de prueba",
-		Remitente:    "test@test.com",
-		Destinatario: "dest@test.com",
+		Asunto:       asuntoPrueba,
+		Cuerpo:       cuerpoPrueba,
+		Remitente:    remitente,
+		Destinatario: destinatario2,
 		Adjunto:      false,
 	}, nil)
 
 	emailService := new(MockEmailService)
 	emailService.On(
 		"SendEmail",
-		"test@test.com",
-		"dest@test.com",
-		"Asunto de prueba",
-		"Cuerpo de prueba",
-	).Return(errors.New("error al enviar el correo"))
+		remitente,
+		destinatario2,
+		asuntoPrueba,
+		cuerpoPrueba,
+	).Return(errors.New(mensajeError))
 
 	service := NewPlantillaService(repo, emailService)
 
@@ -156,14 +178,14 @@ func TestHandlePlantilla_ErrorSendingEmail(t *testing.T) {
 	)
 
 	assert.Error(t, err)
-	assert.Equal(t, "error al enviar el correo", err.Error())
+	assert.Equal(t, mensajeError, err.Error())
 
 	repo.AssertExpectations(t)
 	emailService.AssertExpectations(t)
 
 }
 
-func TestHandlePlantilla_ErrorCheckPlantillaExists(t *testing.T) {
+func TestHandlePlantillaErrorCheckPlantillaExists(t *testing.T) {
 	repo := new(MockPlantillaRepository)
 	emailService := new(MockEmailService)
 
@@ -189,26 +211,26 @@ func TestHandlePlantilla_ErrorCheckPlantillaExists(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
-func TestHandlePlantilla_WithPlaceholders(t *testing.T) {
+func TestHandlePlantillaWithPlaceholders(t *testing.T) {
 	repo := new(MockPlantillaRepository)
 	emailService := new(MockEmailService)
 
 	// Simular que la plantilla existe en la base de datos
 	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
-		Asunto:       "Asunto de prueba",
+		Asunto:       asuntoPrueba,
 		Cuerpo:       "Hola, &nombre!",
-		Remitente:    "test@example.com",
-		Destinatario: "dest@example.com",
+		Remitente:    remitente,
+		Destinatario: destinatario,
 		Adjunto:      false,
 	}, nil)
 
 	// Simular que el envío de correo es exitoso, incluyendo el `messageID` como quinto argumento
 	emailService.On(
 		"SendEmail",
-		"test@example.com",
-		"dest@example.com",
-		"Asunto de prueba",
+		remitente,
+		destinatario,
+		asuntoPrueba,
 		"Hola, Juan!",
 	).Return(nil)
 
@@ -232,28 +254,30 @@ func TestHandlePlantilla_WithPlaceholders(t *testing.T) {
 	emailService.AssertExpectations(t)
 }
 
-func TestHandlePlantilla_PanicOnErrorSendingEmail(t *testing.T) {
+func TestHandlePlantillaPanicOnErrorSendingEmail(t *testing.T) {
 	repo := new(MockPlantillaRepository)
 	emailService := new(MockEmailService)
 
 	// Simular que la plantilla existe en la base de datos
-	repo.On("CheckPlantillaExists", "PC003").Return(true, &models.Plantilla{
+	repo.On(
+		"CheckPlantillaExists",
+		"PC003").Return(true, &models.Plantilla{
 		IDPlantilla:  "PC003",
-		Asunto:       "Asunto de prueba",
+		Asunto:       asuntoPrueba,
 		Cuerpo:       "Hola, &nombre!",
-		Remitente:    "test@example.com",
-		Destinatario: "dest@example.com",
+		Remitente:    remitente,
+		Destinatario: destinatario,
 		Adjunto:      false,
 	}, nil)
 
 	// Simular que el envío de correo falla
 	emailService.On(
 		"SendEmail",
-		"test@example.com",
-		"dest@example.com",
-		"Asunto de prueba",
+		remitente,
+		destinatario,
+		asuntoPrueba,
 		"Hola, Juan!",
-	).Return(errors.New("error al enviar el correo"))
+	).Return(errors.New(mensajeError))
 
 	service := NewPlantillaService(repo, emailService)
 

@@ -11,6 +11,11 @@ func containsLog(output, expected string) bool {
 	return bytes.Contains([]byte(output), []byte(expected))
 }
 
+const (
+	mensajeInfo  = "Este es un mensaje de información"
+	mensajeError = "Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s"
+)
+
 // Helper para capturar la salida de la consola
 func captureOutput(f func()) string {
 	var buf bytes.Buffer
@@ -29,12 +34,12 @@ func captureOutput(f func()) string {
 
 func TestLogInfo(t *testing.T) {
 	output := captureOutput(func() {
-		LogInfo("Este es un mensaje de información", "messageID")
+		LogInfo(mensajeInfo, "messageID")
 	})
 
 	expected := "INFO"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 }
 
@@ -46,7 +51,7 @@ func TestLogWarn(t *testing.T) {
 
 	expected := "WARNING"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 
 	// Test con parámetros opcionales
@@ -56,7 +61,7 @@ func TestLogWarn(t *testing.T) {
 
 	expected = "WARNING"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 }
 
@@ -68,7 +73,7 @@ func TestLogError(t *testing.T) {
 
 	expected := "ERROR"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 
 	// Test con error
@@ -78,7 +83,7 @@ func TestLogError(t *testing.T) {
 
 	expectedMessage := "Error: file does not exist"
 	if !containsLog(err, expectedMessage) {
-		t.Errorf("Se esperaba el mensaje '%s' en la salida, pero no se encontró. Salida: %s", expectedMessage, err)
+		t.Errorf(mensajeError, expectedMessage, err)
 	}
 }
 
@@ -92,11 +97,11 @@ func TestLogDebug(t *testing.T) {
 
 	expected := "DEBUG"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 }
 
-func TestLoggerAdapter_LogError(t *testing.T) {
+func TestLoggerAdapterLogError(t *testing.T) {
 	adapter := &LoggerAdapter{}
 	output := captureOutput(func() {
 		adapter.LogError("Este es un error desde el adaptador", os.ErrNotExist, "messageID")
@@ -104,16 +109,16 @@ func TestLoggerAdapter_LogError(t *testing.T) {
 
 	expected := "ERROR"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 
 	expectedMessage := "Error: file does not exist"
 	if !containsLog(output, expectedMessage) {
-		t.Errorf("Se esperaba el mensaje '%s' en la salida, pero no se encontró. Salida: %s", expectedMessage, output)
+		t.Errorf(mensajeError, expectedMessage, output)
 	}
 }
 
-func TestLoggerAdapter_LogInfo(t *testing.T) {
+func TestLoggerAdapterLogInfo(t *testing.T) {
 	adapter := &LoggerAdapter{}
 	output := captureOutput(func() {
 		adapter.LogInfo("Este es un mensaje de información desde el adaptador", "messageID")
@@ -121,11 +126,11 @@ func TestLoggerAdapter_LogInfo(t *testing.T) {
 
 	expected := "INFO"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 }
 
-func TestLoggerAdapter_LogWarn(t *testing.T) {
+func TestLoggerAdapterLogWarn(t *testing.T) {
 	adapter := &LoggerAdapter{}
 	output := captureOutput(func() {
 		adapter.LogWarn("Este es un mensaje de advertencia desde el adaptador", "messageID")
@@ -133,11 +138,11 @@ func TestLoggerAdapter_LogWarn(t *testing.T) {
 
 	expected := "WARNING"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 }
 
-func TestLoggerAdapter_LogDebug(t *testing.T) {
+func TestLoggerAdapterLogDebug(t *testing.T) {
 	adapter := &LoggerAdapter{}
 	os.Setenv("LOG_LEVEL", "DEBUG")
 	defer os.Unsetenv("LOG_LEVEL")
@@ -148,28 +153,28 @@ func TestLoggerAdapter_LogDebug(t *testing.T) {
 
 	expected := "DEBUG"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 }
 
 func TestLogMessageWithoutMessageID(t *testing.T) {
 	output := captureOutput(func() {
-		logMessage("INFO", "Este es un mensaje de información", "")
+		logMessage("INFO", mensajeInfo, "")
 	})
 
 	expected := "INFO"
 	if !containsLog(output, expected) {
-		t.Errorf("Se esperaba el nivel %s en la salida, pero no se encontró. Salida: %s", expected, output)
+		t.Errorf(mensajeError, expected, output)
 	}
 	expectedMessage := "Este es un mensaje de información"
 	if !containsLog(output, expectedMessage) {
-		t.Errorf("Se esperaba el mensaje '%s' en la salida, pero no se encontró. Salida: %s", expectedMessage, output)
+		t.Errorf(mensajeError, expectedMessage, output)
 	}
 }
 
 func TestLogMessageWithMessageID(t *testing.T) {
 	output := captureOutput(func() {
-		logMessage("INFO", "Este es un mensaje de información", "messageID")
+		logMessage("INFO", mensajeInfo, "messageID")
 	})
 
 	expected := "[MessageId: messageID]"

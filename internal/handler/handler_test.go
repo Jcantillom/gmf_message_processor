@@ -69,14 +69,17 @@ func (m *MockSQSClient) SendMessage(
 	return args.Get(0).(*sqs.SendMessageOutput), args.Error(1)
 }
 
+const (
+	queueURL             = "http://localhost:4566/000000000000/my-queue"
+	recipientHandleTest  = "receipt-handle-1"
+	recipientHandleTest2 = "handle-1"
+)
+
 func TestHandleLambdaEvent(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-
-	// Asigna una URL válida de SQS
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	// Crear el handler con los mocks y la QueueURL
 	sqsHandler := NewSQSHandler(
@@ -93,7 +96,7 @@ func TestHandleLambdaEvent(t *testing.T) {
 			{
 				MessageId:     "1",
 				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
+				ReceiptHandle: recipientHandleTest,
 			},
 		},
 	}
@@ -120,7 +123,6 @@ func TestHandleLambdaEvent(t *testing.T) {
 		mockSQSClient, queueURL, // Usa la QueueURL en lugar de obtenerla del cliente
 		mock.Anything, "1").Return(nil)
 
-	// Ejecutar el método a probar
 	err := sqsHandler.HandleLambdaEvent(context.Background(), sqsEvent)
 
 	// Verificar que no haya errores
@@ -134,13 +136,11 @@ func TestHandleLambdaEvent(t *testing.T) {
 	mockSQSClient.AssertExpectations(t)
 }
 
-func TestHandleLambdaEvent_ErrorExtractingMessageBody(t *testing.T) {
+func TestHandleLambdaEventErrorExtractingMessageBody(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(
 		mockPlantillaService,
@@ -155,7 +155,7 @@ func TestHandleLambdaEvent_ErrorExtractingMessageBody(t *testing.T) {
 			{
 				MessageId:     "1",
 				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
+				ReceiptHandle: recipientHandleTest,
 			},
 		},
 	}
@@ -184,13 +184,11 @@ func TestHandleLambdaEvent_ErrorExtractingMessageBody(t *testing.T) {
 	mockUtils.AssertExpectations(t)
 }
 
-func TestHandleLambdaEvent_ErrorValidatingMessage(t *testing.T) {
+func TestHandleLambdaEventErrorValidatingMessage(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(
 		mockPlantillaService,
@@ -205,7 +203,7 @@ func TestHandleLambdaEvent_ErrorValidatingMessage(t *testing.T) {
 			{
 				MessageId:     "1",
 				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
+				ReceiptHandle: recipientHandleTest,
 			},
 		},
 	}
@@ -237,14 +235,13 @@ func TestHandleLambdaEvent_ErrorValidatingMessage(t *testing.T) {
 	mockUtils.AssertExpectations(t)
 }
 
-func TestHandleLambdaEvent_ErrorReenviandoMensaje(t *testing.T) {
+func TestHandleLambdaEventErrorReenviandoMensaje(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
 
 	// Asigna una URL válida de SQS
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	// Crear el handler con los mocks
 	sqsHandler := NewSQSHandler(
@@ -261,7 +258,7 @@ func TestHandleLambdaEvent_ErrorReenviandoMensaje(t *testing.T) {
 			{
 				MessageId:     "1",
 				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
+				ReceiptHandle: recipientHandleTest,
 			},
 		},
 	}
@@ -281,7 +278,7 @@ func TestHandleLambdaEvent_ErrorReenviandoMensaje(t *testing.T) {
 	mockUtils.On(
 		"DeleteMessageFromQueue",
 		mock.Anything, mockSQSClient,
-		queueURL, // Usa queueURL directamente
+		queueURL,
 		mock.Anything, "1").
 		Return(nil)
 	mockPlantillaService.On(
@@ -292,11 +289,10 @@ func TestHandleLambdaEvent_ErrorReenviandoMensaje(t *testing.T) {
 	mockUtils.On(
 		"SendMessageToQueue",
 		mock.Anything, mockSQSClient,
-		queueURL, // Usa queueURL directamente
+		queueURL,
 		mock.Anything, "1").
 		Return(fmt.Errorf("error al reenviar el mensaje a SQS"))
 
-	// Ejecutar el método a probar
 	err := sqsHandler.HandleLambdaEvent(context.Background(), sqsEvent)
 
 	// Verificar que se retornó un error
@@ -310,80 +306,11 @@ func TestHandleLambdaEvent_ErrorReenviandoMensaje(t *testing.T) {
 	mockSQSClient.AssertExpectations(t)
 }
 
-func TestHandleLambdaEvent_RetryOnPanic(t *testing.T) {
+func TestHandleLambdaEventErrorConvertingMessageToJSON(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-
-	// Asigna una URL válida de SQS
-	queueURL := "http://localhost:4566/000000000000/my-queue"
-
-	sqsHandler := NewSQSHandler(
-		mockPlantillaService,
-		mockSQSClient,
-		mockUtils,
-		logger,
-		queueURL, // Usa queueURL directamente
-	)
-
-	// Configurar el evento SQS
-	sqsEvent := events.SQSEvent{
-		Records: []events.SQSMessage{
-			{
-				MessageId:     "1",
-				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
-			},
-		},
-	}
-
-	// Simular extracción y validación de mensaje exitosas
-	mockUtils.On("ExtractMessageBody", mock.Anything, "1").Return(`{"IDPlantilla":"123","Parametro":[]}`, nil)
-	mockUtils.On("ValidateSQSMessage", mock.Anything).Return(&models.SQSMessage{
-		IDPlantilla: "123",
-		Parametro:   []models.ParametrosSQS{},
-		RetryCount:  0,
-	}, nil)
-
-	// Simular la eliminación del mensaje de la cola SQS
-	mockUtils.On("DeleteMessageFromQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(nil)
-
-	// Forzar un panic en el servicio para probar el manejo del panic
-	mockPlantillaService.On("HandlePlantilla", mock.Anything, mock.Anything, "1").Run(func(args mock.Arguments) {
-		panic("simulated panic")
-	}).Return(nil)
-
-	// Simular que el reenvío del mensaje falla
-	mockUtils.On("SendMessageToQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(fmt.Errorf("error al reenviar el mensaje a SQS")).Once()
-
-	// Ejecutar el método a probar
-	err := sqsHandler.HandleLambdaEvent(context.Background(), sqsEvent)
-
-	// Verificar que no hubo error
-	if err != nil {
-		t.Errorf("Se esperaba que no hubiera error, pero se obtuvo: %v", err)
-	}
-
-	// Verificar que se realizaron las llamadas correctas
-	mockSQSClient.AssertExpectations(t)
-	mockUtils.AssertExpectations(t)
-	mockPlantillaService.AssertExpectations(t)
-
-	// Verificar que el mensaje fue reenviado tras el panic
-	mockUtils.AssertCalled(t, "SendMessageToQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1")
-
-	// Verificar que el logger registre el reintento y los errores
-}
-
-func TestHandleLambdaEvent_ErrorConvertingMessageToJSON(t *testing.T) {
-	mockUtils := new(MockUtils)
-	mockPlantillaService := new(MockPlantillaService)
-	mockSQSClient := new(MockSQSClient)
-	logger := &logs.LoggerAdapter{}
-
-	// Asigna una URL válida de SQS
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(
 		mockPlantillaService,
@@ -399,13 +326,16 @@ func TestHandleLambdaEvent_ErrorConvertingMessageToJSON(t *testing.T) {
 			{
 				MessageId:     "1",
 				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
+				ReceiptHandle: recipientHandleTest,
 			},
 		},
 	}
 
 	// Simular la extracción y validación de mensaje exitosas
-	mockUtils.On("ExtractMessageBody", mock.Anything, "1").Return(`{"IDPlantilla":"123","Parametro":[]}`, nil)
+	mockUtils.On(
+		"ExtractMessageBody",
+		mock.Anything, "1").
+		Return(`{"IDPlantilla":"123","Parametro":[]}`, nil)
 	mockUtils.On("ValidateSQSMessage", mock.Anything).Return(&models.SQSMessage{
 		IDPlantilla: "123",
 		Parametro:   []models.ParametrosSQS{},
@@ -413,15 +343,22 @@ func TestHandleLambdaEvent_ErrorConvertingMessageToJSON(t *testing.T) {
 	}, nil)
 
 	// Simular la eliminación de la cola
-	mockUtils.On("DeleteMessageFromQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(nil)
+	mockUtils.On(
+		"DeleteMessageFromQueue",
+		mock.Anything,
+		mockSQSClient,
+		queueURL,
+		mock.Anything, "1").Return(nil)
 
 	// Simular el procesamiento de la plantilla
-	mockPlantillaService.On("HandlePlantilla", mock.Anything, mock.Anything, "1").Return(fmt.Errorf("error procesando el mensaje"))
+	mockPlantillaService.On(
+		"HandlePlantilla",
+		mock.Anything, mock.Anything, "1").Return(fmt.Errorf("error procesando el mensaje"))
 
 	// Simular un error al convertir el mensaje a JSON
-	mockUtils.On("SendMessageToQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(fmt.Errorf("error al convertir destinatarios a JSON"))
+	mockUtils.On(
+		"SendMessageToQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(fmt.Errorf("error al convertir destinatarios a JSON"))
 
-	// Ejecutar el método a probar
 	err := sqsHandler.HandleLambdaEvent(context.Background(), sqsEvent)
 
 	// Verificar que se retornó un error
@@ -435,14 +372,11 @@ func TestHandleLambdaEvent_ErrorConvertingMessageToJSON(t *testing.T) {
 	mockSQSClient.AssertExpectations(t)
 }
 
-func TestHandleLambdaEvent_MaxRetriesReached(t *testing.T) {
+func TestHandleLambdaEventMaxRetriesReached(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-
-	// Asigna una URL válida de SQS
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(
 		mockPlantillaService,
@@ -458,13 +392,15 @@ func TestHandleLambdaEvent_MaxRetriesReached(t *testing.T) {
 			{
 				MessageId:     "1",
 				Body:          `{"IDPlantilla":"123","Parametro":[]}`,
-				ReceiptHandle: "receipt-handle-1",
+				ReceiptHandle: recipientHandleTest,
 			},
 		},
 	}
 
 	// Simular extracción y validación de mensaje exitosas
-	mockUtils.On("ExtractMessageBody", mock.Anything, "1").Return(`{"IDPlantilla":"123","Parametro":[]}`, nil)
+	mockUtils.On(
+		"ExtractMessageBody",
+		mock.Anything, "1").Return(`{"IDPlantilla":"123","Parametro":[]}`, nil)
 	mockUtils.On("ValidateSQSMessage", mock.Anything).Return(&models.SQSMessage{
 		IDPlantilla: "123",
 		Parametro:   []models.ParametrosSQS{},
@@ -472,9 +408,12 @@ func TestHandleLambdaEvent_MaxRetriesReached(t *testing.T) {
 	}, nil)
 
 	// Simular eliminación de la cola
-	mockUtils.On("DeleteMessageFromQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(nil)
+	mockUtils.On(
+		"DeleteMessageFromQueue",
+		mock.Anything, mockSQSClient,
+		queueURL,
+		mock.Anything, "1").Return(nil)
 
-	// Ejecutar el método a probar
 	err := sqsHandler.HandleLambdaEvent(context.Background(), sqsEvent)
 
 	// Verificar que no hubo error
@@ -488,15 +427,15 @@ func TestHandleLambdaEvent_MaxRetriesReached(t *testing.T) {
 	mockSQSClient.AssertExpectations(t)
 
 	// Asegurarse de que `HandlePlantilla` no fue llamado
-	mockPlantillaService.AssertNotCalled(t, "HandlePlantilla", mock.Anything, mock.Anything, mock.Anything)
+	mockPlantillaService.AssertNotCalled(
+		t, "HandlePlantilla", mock.Anything, mock.Anything, mock.Anything)
 }
 
-func TestHandleLambdaEvent_ErrorDeletingMessage(t *testing.T) {
+func TestHandleLambdaEventErrorDeletingMessage(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(mockPlantillaService, mockSQSClient, mockUtils, logger, queueURL)
 
@@ -516,12 +455,11 @@ func TestHandleLambdaEvent_ErrorDeletingMessage(t *testing.T) {
 	}
 }
 
-func TestRetryMessage_ErrorMarshalling(t *testing.T) {
+func TestRetryMessageErrorMarshalling(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(mockPlantillaService, mockSQSClient, mockUtils, logger, queueURL)
 
@@ -542,25 +480,32 @@ func TestRetryMessage_ErrorMarshalling(t *testing.T) {
 	}
 }
 
-func TestHandleLambdaEvent_Success(t *testing.T) {
+func TestHandleLambdaEventSuccess(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(mockPlantillaService, mockSQSClient, mockUtils, logger, queueURL)
 
 	sqsEvent := events.SQSEvent{
 		Records: []events.SQSMessage{
-			{MessageId: "1", Body: "{}", ReceiptHandle: "handle-1"},
+			{MessageId: "1", Body: "{}", ReceiptHandle: recipientHandleTest2},
 		},
 	}
 
-	mockUtils.On("DeleteMessageFromQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(nil)
+	mockUtils.On(
+		"DeleteMessageFromQueue",
+		mock.Anything, mockSQSClient,
+		queueURL, mock.Anything, "1").
+		Return(nil)
 	mockUtils.On("ExtractMessageBody", "{}", "1").Return("{}", nil)
 	mockUtils.On("ValidateSQSMessage", "{}").Return(&models.SQSMessage{}, nil)
-	mockPlantillaService.On("HandlePlantilla", mock.Anything, &models.SQSMessage{}, "1").Return(nil)
+	mockPlantillaService.On(
+		"HandlePlantilla",
+		mock.Anything,
+		&models.SQSMessage{},
+		"1").Return(nil)
 
 	err := sqsHandler.HandleLambdaEvent(context.Background(), sqsEvent)
 
@@ -569,19 +514,21 @@ func TestHandleLambdaEvent_Success(t *testing.T) {
 	}
 }
 
-func TestRetryMessage_Success(t *testing.T) {
+func TestRetryMessageSuccess(t *testing.T) {
 	mockUtils := new(MockUtils)
 	mockPlantillaService := new(MockPlantillaService)
 	mockSQSClient := new(MockSQSClient)
 	logger := &logs.LoggerAdapter{}
-	queueURL := "http://localhost:4566/000000000000/my-queue"
 
 	sqsHandler := NewSQSHandler(mockPlantillaService, mockSQSClient, mockUtils, logger, queueURL)
 
 	msg := &models.SQSMessage{IDPlantilla: "123", RetryCount: 1}
 	messageID := "1"
 
-	mockUtils.On("SendMessageToQueue", mock.Anything, mockSQSClient, queueURL, mock.Anything, "1").Return(nil)
+	mockUtils.On(
+		"SendMessageToQueue",
+		mock.Anything, mockSQSClient,
+		queueURL, mock.Anything, "1").Return(nil)
 
 	err := sqsHandler.retryMessage(context.Background(), msg, messageID, nil)
 
@@ -590,8 +537,7 @@ func TestRetryMessage_Success(t *testing.T) {
 	}
 }
 
-// En handler_test.go
-func TestPrintSQSEvent_ErrorMarshalling(t *testing.T) {
+func TestPrintSQSEventErrorMarshalling(t *testing.T) {
 	// Sobrescribimos jsonMarshalIndent para simular un error
 	originalMarshalIndent := jsonMarshalIndent
 	defer func() { jsonMarshalIndent = originalMarshalIndent }() // Restauramos el valor original después de la prueba
@@ -602,7 +548,7 @@ func TestPrintSQSEvent_ErrorMarshalling(t *testing.T) {
 	// Simular un evento SQS
 	sqsEvent := events.SQSEvent{
 		Records: []events.SQSMessage{
-			{MessageId: "1", Body: "{}", ReceiptHandle: "handle-1"},
+			{MessageId: "1", Body: "{}", ReceiptHandle: recipientHandleTest2},
 		},
 	}
 

@@ -41,7 +41,7 @@ func (m *MockDBManager) GetDB() *gorm.DB {
 	return args.Get(0).(*gorm.DB)
 }
 
-func TestProcessLocalEvent_Success(t *testing.T) {
+func TestProcessLocalEventSuccess(t *testing.T) {
 	// Simular el evento SQS como archivo JSON
 	mockFileContent := []byte(`
 	{
@@ -74,7 +74,7 @@ func TestProcessLocalEvent_Success(t *testing.T) {
 	mockDBManager.AssertCalled(t, "CloseDB", "") // Verificar que CloseDB fue llamado
 }
 
-func TestReadSQSEventFromFile_Success(t *testing.T) {
+func TestReadSQSEventFromFileSuccess(t *testing.T) {
 	// Simulamos que el archivo `test_data/event.json` contiene el evento correcto
 	mockFileContent := []byte(`
 	{
@@ -100,7 +100,7 @@ func TestReadSQSEventFromFile_Success(t *testing.T) {
 	assert.Equal(t, "12345", sqsEvent.Records[0].MessageId)
 }
 
-func TestReadSQSEventFromFile_FileNotFound(t *testing.T) {
+func TestReadSQSEventFromFileFileNotFound(t *testing.T) {
 	// Simulamos un error al leer el archivo
 	mockFileReader := func(filename string) ([]byte, error) {
 		return nil, errors.New("file not found")
@@ -114,7 +114,7 @@ func TestReadSQSEventFromFile_FileNotFound(t *testing.T) {
 	assert.Nil(t, sqsEvent)
 }
 
-func TestReadSQSEventFromFile_InvalidJSON(t *testing.T) {
+func TestReadSQSEventFromFileInvalidJSON(t *testing.T) {
 	// Simulamos que el archivo contiene JSON inválido
 	mockFileReader := func(filename string) ([]byte, error) {
 		return []byte(`{ invalid json `), nil
@@ -128,7 +128,7 @@ func TestReadSQSEventFromFile_InvalidJSON(t *testing.T) {
 	assert.Nil(t, sqsEvent)
 }
 
-func TestProcessLocalEvent_FileReadFailure(t *testing.T) {
+func TestProcessLocalEventFileReadFailure(t *testing.T) {
 	// Crear mocks
 	mockSQSHandler := new(MockSQSHandler)
 	mockDBManager := new(MockDBManager)
@@ -157,7 +157,7 @@ func TestProcessLocalEvent_FileReadFailure(t *testing.T) {
 	assert.True(t, cleanupCalled, "CleanupApplication debería haber sido llamada")
 }
 
-func TestProcessLocalEvent_SQSEventFailure(t *testing.T) {
+func TestProcessLocalEventSQSEventFailure(t *testing.T) {
 	// Simular el evento SQS como archivo JSON
 	mockFileContent := []byte(`
     {

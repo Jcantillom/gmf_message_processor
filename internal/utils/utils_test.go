@@ -14,6 +14,11 @@ import (
 	"gmf_message_processor/internal/utils"
 )
 
+const (
+	queueURL    = "https://example.com/queue"
+	messageBody = "test message"
+)
+
 // MockSQSAPI is a mock implementation of the SQSAPI interface.
 type MockSQSAPI struct {
 	mock.Mock
@@ -65,7 +70,6 @@ func TestDeleteMessageFromQueue(t *testing.T) {
 	u := &utils.Utils{}
 	messageID := "testMessageID"
 	mockSQS := new(MockSQSAPI)
-	queueURL := "https://example.com/queue"
 	receiptHandle := "testReceiptHandle"
 
 	mockSQS.On("DeleteMessage", mock.Anything, mock.Anything).Return(&sqs.DeleteMessageOutput{}, nil)
@@ -105,8 +109,6 @@ func TestSendMessageToQueue(t *testing.T) {
 	u := &utils.Utils{}
 	messageID := "testMessageID"
 	mockSQS := new(MockSQSAPI)
-	queueURL := "https://example.com/queue"
-	messageBody := "test message"
 
 	// Set SQS_MESSAGE_DELAY env variable
 	os.Setenv("SQS_MESSAGE_DELAY", "5")
@@ -152,7 +154,7 @@ func TestGetMaxRetries(t *testing.T) {
 	assert.Equal(t, 3, utils.GetMaxRetries())
 }
 
-func TestValidateSQSMessage_InvalidJSON(t *testing.T) {
+func TestValidateSQSMessageInvalidJSON(t *testing.T) {
 	u := &utils.Utils{}
 
 	invalidMessage := `invalid json`
@@ -163,12 +165,10 @@ func TestValidateSQSMessage_InvalidJSON(t *testing.T) {
 	assert.Equal(t, "invalid JSON format", err.Error())
 }
 
-func TestSendMessageToQueue_InvalidDelayEnvVar(t *testing.T) {
+func TestSendMessageToQueueInvalidDelayEnvVar(t *testing.T) {
 	u := &utils.Utils{}
 	messageID := "testMessageID"
 	mockSQS := new(MockSQSAPI)
-	queueURL := "https://example.com/queue"
-	messageBody := "test message"
 
 	// Set invalid SQS_MESSAGE_DELAY env variable
 	os.Setenv("SQS_MESSAGE_DELAY", "invalid")
@@ -189,12 +189,10 @@ func TestSendMessageToQueue_InvalidDelayEnvVar(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid syntax") // Verifica que el error contenga el mensaje de strconv.Atoi
 }
 
-func TestSendMessageToQueue_Failure(t *testing.T) {
+func TestSendMessageToQueueFailure(t *testing.T) {
 	u := &utils.Utils{}
 	messageID := "testMessageID"
 	mockSQS := new(MockSQSAPI)
-	queueURL := "https://example.com/queue"
-	messageBody := "test message"
 
 	// Set SQS_MESSAGE_DELAY env variable
 	os.Setenv("SQS_MESSAGE_DELAY", "5")
@@ -216,11 +214,10 @@ func TestSendMessageToQueue_Failure(t *testing.T) {
 	assert.Contains(t, err.Error(), "SQS error")
 }
 
-func TestDeleteMessageFromQueue_Failure(t *testing.T) {
+func TestDeleteMessageFromQueueFailure(t *testing.T) {
 	u := &utils.Utils{}
 	messageID := "testMessageID"
 	mockSQS := new(MockSQSAPI)
-	queueURL := "https://example.com/queue"
 	receiptHandle := "testReceiptHandle"
 
 	// Simular que SQS devuelve un error pero aún devuelve un *sqs.DeleteMessageOutput válido
@@ -237,4 +234,17 @@ func TestDeleteMessageFromQueue_Failure(t *testing.T) {
 	// Verificar que ocurrió un error
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SQS delete error")
+}
+
+func TestReplacePlaceholdersOrderByLength(t *testing.T) {
+	text := "Archivo: {nombre_archivo}, Incidente: {nombre_archivo_incidentes}"
+	params := map[string]string{
+		"{nombre_archivo}":            "archivo1.txt",
+		"{nombre_archivo_incidentes}": "archivo1_incidentes.txt",
+	}
+
+	result := utils.ReplacePlaceholders(text, params)
+
+	// Validar que los placeholders se reemplazan correctamente sin conflictos.
+	assert.Equal(t, "Archivo: archivo1.txt, Incidente: archivo1_incidentes.txt", result)
 }

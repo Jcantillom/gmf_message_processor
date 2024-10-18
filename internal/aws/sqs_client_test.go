@@ -47,26 +47,29 @@ func (m *MockSQSClient) GetQueueURL() string {
 	return args.String(0)
 }
 
+const queueURL = "http://localhost:4566/000000000000/my-queue"
+const region = "us-east-1"
+
 // Test para verificar la creación del cliente SQS con una URL válida
-func TestNewSQSClient_ValidURL(t *testing.T) {
+func TestNewSQSClientValidURL(t *testing.T) {
 	os.Setenv("APP_ENV", "local")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
+	client, err := NewSQSClient(queueURL, mockLoadConfigFunc)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	assert.Equal(t, "http://localhost:4566/000000000000/my-queue", client.QueueURL)
+	assert.Equal(t, queueURL, client.QueueURL)
 }
 
 // Test para verificar el manejo de una URL inválida
-func TestNewSQSClient_InvalidURL(t *testing.T) {
+func TestNewSQSClientInvalidURL(t *testing.T) {
 	_, err := NewSQSClient("invalid-url", mockLoadConfigFunc)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid queue URL")
 }
 
 // Test para manejar un error al cargar la configuración
-func TestNewSQSClient_LoadConfigError(t *testing.T) {
+func TestNewSQSClientLoadConfigError(t *testing.T) {
 	os.Setenv("APP_ENV", "local")
 	defer os.Unsetenv("APP_ENV")
 
@@ -74,38 +77,38 @@ func TestNewSQSClient_LoadConfigError(t *testing.T) {
 		return aws.Config{}, fmt.Errorf("unable to load AWS SDK config")
 	}
 
-	_, err := NewSQSClient("http://localhost:4566/000000000000/my-queue", mockLoadConfigFunc)
+	_, err := NewSQSClient(queueURL, mockLoadConfigFunc)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unable to load AWS SDK config")
 }
 
 // Test para verificar la creación de un cliente SQS en un entorno de producción
-func TestNewSQSClient_ProdEnv(t *testing.T) {
+func TestNewSQSClientProdEnv(t *testing.T) {
 	os.Setenv("APP_ENV", "prod")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := NewSQSClient("https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", mockLoadConfigFunc)
+	client, err := NewSQSClient(queueURL, mockLoadConfigFunc)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	assert.Equal(t, "https://sqs.us-east-1.amazonaws.com/000000000000/my-queue", client.QueueURL)
+	assert.Equal(t, queueURL, client.QueueURL)
 }
 
-func TestSQSClient_GetQueueURL(t *testing.T) {
+func TestSQSClientGetQueueURL(t *testing.T) {
 	client := &SQSClient{
-		QueueURL: "http://localhost:4566/000000000000/my-queue",
+		QueueURL: queueURL,
 	}
-	assert.Equal(t, "http://localhost:4566/000000000000/my-queue", client.GetQueueURL())
+	assert.Equal(t, queueURL, client.GetQueueURL())
 }
 
 // Test para verificar que DeleteMessage funciona correctamente con el mock
-func TestSQSClient_DeleteMessage(t *testing.T) {
+func TestSQSClientDeleteMessage(t *testing.T) {
 	// Crear el mock del cliente SQS
 	mockSQS := new(MockSQSClient)
 
 	// Crear el cliente SQS utilizando el mock
 	client := &SQSClient{
 		Client:   mockSQS, // Usa el mock en lugar de *sqs.Client
-		QueueURL: "http://localhost:4566/000000000000/my-queue",
+		QueueURL: queueURL,
 	}
 
 	// Definir los inputs y outputs mockeados
@@ -127,12 +130,12 @@ func TestSQSClient_DeleteMessage(t *testing.T) {
 	mockSQS.AssertExpectations(t)
 }
 
-func TestSQSClient_SendMessage(t *testing.T) {
+func TestSQSClientSendMessage(t *testing.T) {
 	// Crear un mock del cliente SQS
 	mockSQS := new(MockSQSClient)
 	client := &SQSClient{
 		Client:   mockSQS,
-		QueueURL: "http://localhost:4566/000000000000/my-queue",
+		QueueURL: queueURL,
 	}
 
 	// Definir los inputs y outputs mockeados
@@ -154,7 +157,7 @@ func TestSQSClient_SendMessage(t *testing.T) {
 	mockSQS.AssertExpectations(t)
 }
 
-func TestGetEndpointResolver_LocalEnv(t *testing.T) {
+func TestGetEndpointResolverLocalEnv(t *testing.T) {
 	// Configurar el entorno como local
 	viper.Set("APP_ENV", "local")
 
@@ -162,13 +165,13 @@ func TestGetEndpointResolver_LocalEnv(t *testing.T) {
 	resolver := getEndpointResolver()
 
 	// Probar que devuelve el endpoint correcto para el servicio SQS en local
-	endpoint, err := resolver.ResolveEndpoint(sqs.ServiceID, "us-east-1")
+	endpoint, err := resolver.ResolveEndpoint(sqs.ServiceID, region)
 	assert.NoError(t, err)
 	assert.Equal(t, "http://localhost:4566", endpoint.URL)
-	assert.Equal(t, "us-east-1", endpoint.SigningRegion)
+	assert.Equal(t, region, endpoint.SigningRegion)
 }
 
-func TestGetEndpointResolver_ProdEnv(t *testing.T) {
+func TestGetEndpointResolverProdEnv(t *testing.T) {
 	// Configurar el entorno como prod
 	viper.Set("APP_ENV", "prod")
 
@@ -176,12 +179,12 @@ func TestGetEndpointResolver_ProdEnv(t *testing.T) {
 	resolver := getEndpointResolver()
 
 	// Probar que devuelve un error para entornos prod
-	_, err := resolver.ResolveEndpoint(sqs.ServiceID, "us-east-1")
+	_, err := resolver.ResolveEndpoint(sqs.ServiceID, region)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown endpoint requested for service")
 }
 
-func TestGetEndpointResolver_UnknownAppEnv(t *testing.T) {
+func TestGetEndpointResolverUnknownAppEnv(t *testing.T) {
 	// Configurar el entorno con un valor desconocido
 	viper.Set("APP_ENV", "staging")
 
@@ -189,12 +192,12 @@ func TestGetEndpointResolver_UnknownAppEnv(t *testing.T) {
 	resolver := getEndpointResolver()
 
 	// Probar que devuelve un error para APP_ENV desconocido
-	_, err := resolver.ResolveEndpoint(sqs.ServiceID, "us-east-1")
+	_, err := resolver.ResolveEndpoint(sqs.ServiceID, region)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown APP_ENV")
 }
 
-func TestGetEndpointResolver_UnknownService(t *testing.T) {
+func TestGetEndpointResolverUnknownService(t *testing.T) {
 	// Configurar el entorno como local
 	viper.Set("APP_ENV", "local")
 

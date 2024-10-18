@@ -9,6 +9,7 @@ import (
 	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -103,8 +104,20 @@ func (u *Utils) SendMessageToQueue(
 
 // ReplacePlaceholders ...
 func ReplacePlaceholders(text string, params map[string]string) string {
-	for key, value := range params {
-		text = strings.ReplaceAll(text, key, value)
+	// Obtener los keys ordenados por longitud descendente
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+
+	// Ordenar los keys por longitud descendente
+	sort.Slice(keys, func(i, j int) bool {
+		return len(keys[i]) > len(keys[j])
+	})
+
+	// Reemplazar los placeholders en el texto
+	for _, key := range keys {
+		text = strings.ReplaceAll(text, key, params[key])
 	}
 	return text
 }

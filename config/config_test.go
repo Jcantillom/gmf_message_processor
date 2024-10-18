@@ -209,7 +209,7 @@ func (m *MockPlantillaRepository) CheckPlantillaExists(idPlantilla string) (bool
 	return args.Bool(0), args.Get(1).(*models.Plantilla), args.Error(2)
 }
 
-func TestInitConfig_MissingEnvVarTriggersFatal(t *testing.T) {
+func TestInitConfigMissingEnvVarTriggersFatal(t *testing.T) {
 	// Crear archivo .env temporal con algunas variables faltantes
 	tempEnvFile := ".env"
 	content := []byte(`
@@ -266,7 +266,7 @@ func TestInitConfig_MissingEnvVarTriggersFatal(t *testing.T) {
 	)
 }
 
-func TestInitConfig_LoadsEnvVariables(t *testing.T) {
+func TestInitConfigLoadsEnvVariables(t *testing.T) {
 	// Simular la carga del archivo .env
 	viper.Reset()
 	viper.SetConfigFile(".env")
@@ -308,7 +308,7 @@ func TestInitConfig_LoadsEnvVariables(t *testing.T) {
 	)
 }
 
-func TestInitConfig_EnvFileLoadedSuccessfully(t *testing.T) {
+func TestInitConfigEnvFileLoadedSuccessfully(t *testing.T) {
 	// Simular la carga del archivo .env
 	viper.Reset()
 	viper.SetConfigFile(".env")
@@ -354,7 +354,7 @@ func TestInitConfig_EnvFileLoadedSuccessfully(t *testing.T) {
 	mockLogger.AssertNotCalled(t, "LogError")
 }
 
-func TestInitApplication_DBInitError(t *testing.T) {
+func TestInitApplicationDBInitError(t *testing.T) {
 	// Establecer las variables de entorno necesarias
 	os.Setenv("APP_ENV", "development")
 	os.Setenv("SERVICE_ENV", "local")
@@ -395,12 +395,12 @@ func TestInitApplication_DBInitError(t *testing.T) {
 	assert.EqualError(t, err, "db error")
 }
 
-func TestCleanupApplication_NoDBManager(t *testing.T) {
+func TestCleanupApplicationNoDBManager(t *testing.T) {
 	// Ejecutar CleanupApplication sin DBManager
 	CleanupApplication(nil, "messageID")
 }
 
-func TestCleanupApplication_DBManager(t *testing.T) {
+func TestCleanupApplicationDBManager(t *testing.T) {
 	// Mock the dependencies
 	mockDBManager := new(MockDBManager)
 	mockDBManager.On("CloseDB", "messageID").Return()
@@ -436,7 +436,7 @@ func TestNewPlantillaRepository(t *testing.T) {
 	assert.Equal(t, mockDB.GetDB(), repo.DB)
 }
 
-func TestInitApplication_NewPlantillaRepository(t *testing.T) {
+func TestInitApplicationNewPlantillaRepository(t *testing.T) {
 	// Establecer las variables de entorno necesarias
 	os.Setenv("APP_ENV", "development")
 	os.Setenv("SERVICE_ENV", "local")
@@ -492,7 +492,7 @@ func TestInitApplication_NewPlantillaRepository(t *testing.T) {
 	mockDBManager.AssertCalled(t, "GetDB")
 }
 
-func TestInitApplication_NewSQSHandler(t *testing.T) {
+func TestInitApplicationNewSQSHandler(t *testing.T) {
 	// Establecer las variables de entorno necesarias
 	os.Setenv("APP_ENV", "development")
 	os.Setenv("SERVICE_ENV", "local")
@@ -564,7 +564,7 @@ func TestInitApplication_NewSQSHandler(t *testing.T) {
 
 }
 
-func TestInitApplication_RepositoryInitialization(t *testing.T) {
+func TestInitApplicationRepositoryInitialization(t *testing.T) {
 	// Establecer las variables de entorno necesarias
 	os.Setenv("APP_ENV", "development")
 	os.Setenv("SERVICE_ENV", "local")
@@ -602,7 +602,7 @@ func TestInitApplication_RepositoryInitialization(t *testing.T) {
 	assert.NotNil(t, appContext.PlantillaService)
 }
 
-func TestInitApplication_EmailServiceInitialization(t *testing.T) {
+func TestInitApplicationEmailServiceInitialization(t *testing.T) {
 	// Establecer las variables de entorno necesarias
 	os.Setenv("APP_ENV", "development")
 	os.Setenv("SERVICE_ENV", "local")

@@ -36,24 +36,33 @@ func mockSendMailTimeout(addr string, a smtp.Auth, from string, to []string, msg
 	time.Sleep(100 * time.Millisecond) // Fuerza un retraso mayor al timeout del servicio
 	return nil
 }
-func TestNewSMTPEmailService_DefaultTimeout(t *testing.T) {
+
+const secretName = "my-smtp-secrets"
+const testMessageID = "test-message-id"
+const smtpServerTest = "smtp.test.com"
+const senderEmailTest = "sender@test.com"
+const recipientEmailTest = "recipient@test.com"
+const testSubject = "Test Subject"
+const testBody = "Test Body"
+
+func TestNewSMTPEmailServiceDefaultTimeout(t *testing.T) {
 	mockSecretService := new(MockSecretService)
-	secretName := "my-smtp-secrets"
+
 	secretData := &connection.SecretData{
 		Username: "user",
 		Password: "pass",
 	}
 
 	// Simular la obtención exitosa del secreto
-	mockSecretService.On("GetSecret", secretName, "test-message-id").Return(secretData, nil)
+	mockSecretService.On("GetSecret", secretName, testMessageID).Return(secretData, nil)
 
 	// Simular las variables de entorno sin definir el timeout
 	t.Setenv("SECRETS_SMTP", secretName)
-	t.Setenv("SMTP_SERVER", "smtp.test.com")
+	t.Setenv("SMTP_SERVER", smtpServerTest)
 	t.Setenv("SMTP_PORT", "587")
 
 	// Crear el servicio
-	service, err := NewSMTPEmailService(mockSecretService, "test-message-id")
+	service, err := NewSMTPEmailService(mockSecretService, testMessageID)
 
 	// Verificar que no haya error y que el timeout sea el valor por defecto (15 segundos)
 	assert.NoError(t, err)
@@ -64,9 +73,9 @@ func TestNewSMTPEmailService_DefaultTimeout(t *testing.T) {
 }
 
 // Test que verifica el envío exitoso de un correo
-func TestSMTPEmailService_SendEmail_Success(t *testing.T) {
+func TestSMTPEmailServiceSendEmailSuccess(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   "smtp.test.com",
+		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
@@ -74,14 +83,20 @@ func TestSMTPEmailService_SendEmail_Success(t *testing.T) {
 		timeout:  10 * time.Second,
 	}
 
-	err := service.SendEmail("sender@test.com", "recipient@test.com", "Test Subject", "Test Body", "test-message-id")
+	err := service.SendEmail(
+		senderEmailTest,
+		recipientEmailTest,
+		testSubject,
+		testBody,
+		testMessageID,
+	)
 	assert.NoError(t, err)
 }
 
 // Test que verifica el manejo de timeout
-func TestSMTPEmailService_SendEmail_Timeout(t *testing.T) {
+func TestSMTPEmailServiceSendEmailTimeout(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   "smtp.test.com",
+		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
@@ -89,15 +104,21 @@ func TestSMTPEmailService_SendEmail_Timeout(t *testing.T) {
 		timeout:  1 * time.Millisecond, // Timeout muy corto para forzar el error
 	}
 
-	err := service.SendEmail("sender@test.com", "recipient@test.com", "Test Subject", "Test Body", "test-message-id")
+	err := service.SendEmail(
+		senderEmailTest,
+		recipientEmailTest,
+		testSubject,
+		testBody,
+		testMessageID,
+	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout")
 }
 
 // Test que verifica el manejo de error durante el envío del correo
-func TestSMTPEmailService_SendEmail_Error(t *testing.T) {
+func TestSMTPEmailServiceSendEmailError(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   "smtp.test.com",
+		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
@@ -105,13 +126,19 @@ func TestSMTPEmailService_SendEmail_Error(t *testing.T) {
 		timeout:  10 * time.Second,
 	}
 
-	err := service.SendEmail("sender@test.com", "recipient@test.com", "Test Subject", "Test Body", "test-message-id")
+	err := service.SendEmail(
+		senderEmailTest,
+		recipientEmailTest,
+		testSubject,
+		testBody,
+		testMessageID,
+	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "error enviando el correo")
 }
 
 // Test que verifica la configuración incompleta del servicio SMTP
-func TestSMTPEmailService_SendEmail_IncompleteConfig(t *testing.T) {
+func TestSMTPEmailServiceSendEmailIncompleteConfig(t *testing.T) {
 	service := &SMTPEmailService{
 		server:   "",
 		port:     "",
@@ -121,15 +148,21 @@ func TestSMTPEmailService_SendEmail_IncompleteConfig(t *testing.T) {
 		timeout:  10 * time.Second,
 	}
 
-	err := service.SendEmail("sender@test.com", "recipient@test.com", "Test Subject", "Test Body", "test-message-id")
+	err := service.SendEmail(
+		senderEmailTest,
+		recipientEmailTest,
+		testSubject,
+		testBody,
+		testMessageID,
+	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "configuración SMTP incompleta")
 }
 
 // Test que verifica el caso donde los destinatarios están mal formados o son inválidos.
-func TestSMTPEmailService_SendEmail_InvalidRecipient(t *testing.T) {
+func TestSMTPEmailServiceSendEmailInvalidRecipient(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   "smtp.test.com",
+		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
@@ -139,11 +172,11 @@ func TestSMTPEmailService_SendEmail_InvalidRecipient(t *testing.T) {
 
 	// Caso de destinatarios vacíos
 	err := service.SendEmail(
-		"sender@test.com", // Remitente
-		"",                // Destinatarios vacíos
-		"Test Subject",    // Asunto
-		"Test Body",       // Cuerpo
-		"test-message-id", // Message ID
+		senderEmailTest,
+		"",
+		testSubject,
+		testBody,
+		testMessageID,
 	)
 
 	// Verificamos que se produzca un error por destinatarios inválidos
@@ -151,32 +184,32 @@ func TestSMTPEmailService_SendEmail_InvalidRecipient(t *testing.T) {
 	assert.Contains(t, err.Error(), "error: no se especificaron destinatarios")
 }
 
-func TestNewSMTPEmailService_Success(t *testing.T) {
+func TestNewSMTPEmailServiceSuccess(t *testing.T) {
 	mockSecretService := new(MockSecretService)
-	secretName := "my-smtp-secrets"
 	secretData := &connection.SecretData{
 		Username: "user",
 		Password: "pass",
 	}
 
 	// Simular la obtención exitosa del secreto
-	mockSecretService.On("GetSecret", secretName, "test-message-id").Return(secretData, nil)
+	mockSecretService.On(
+		"GetSecret", secretName, testMessageID).Return(secretData, nil)
 
 	// Simular las variables de entorno
 	t.Setenv("SECRETS_SMTP", secretName)
-	t.Setenv("SMTP_SERVER", "smtp.test.com")
+	t.Setenv("SMTP_SERVER", smtpServerTest)
 	t.Setenv("SMTP_PORT", "587")
 
 	// Simular el valor de timeout usando Viper
 	viper.Set("SMTP_TIMEOUT", "10")
 
 	// Crear el servicio
-	service, err := NewSMTPEmailService(mockSecretService, "test-message-id")
+	service, err := NewSMTPEmailService(mockSecretService, testMessageID)
 
 	// Verificar que no haya error y que los valores sean correctos
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
-	assert.Equal(t, "smtp.test.com", service.server)
+	assert.Equal(t, smtpServerTest, service.server)
 	assert.Equal(t, "587", service.port)
 	assert.Equal(t, "user", service.username)
 	assert.Equal(t, "pass", service.password)
@@ -185,20 +218,23 @@ func TestNewSMTPEmailService_Success(t *testing.T) {
 	mockSecretService.AssertExpectations(t)
 }
 
-func TestNewSMTPEmailService_ErrorGettingSecret(t *testing.T) {
+func TestNewSMTPEmailServiceErrorGettingSecret(t *testing.T) {
 	mockSecretService := new(MockSecretService)
-	secretName := "my-smtp-secrets"
 
 	// Simular que la obtención del secreto devuelve un error
-	mockSecretService.On("GetSecret", secretName, "test-message-id").Return((*connection.SecretData)(nil), errors.New("error obteniendo secreto"))
+	mockSecretService.On(
+		"GetSecret",
+		secretName,
+		testMessageID).
+		Return((*connection.SecretData)(nil), errors.New("error obteniendo secreto"))
 
 	// Simular las variables de entorno
 	t.Setenv("SECRETS_SMTP", secretName)
-	t.Setenv("SMTP_SERVER", "smtp.test.com")
+	t.Setenv("SMTP_SERVER", smtpServerTest)
 	t.Setenv("SMTP_PORT", "587")
 
 	// Crear el servicio (debe fallar)
-	service, err := NewSMTPEmailService(mockSecretService, "test-message-id")
+	service, err := NewSMTPEmailService(mockSecretService, testMessageID)
 
 	// Verificar que haya un error y que el servicio sea nil
 	assert.Error(t, err)
@@ -208,9 +244,9 @@ func TestNewSMTPEmailService_ErrorGettingSecret(t *testing.T) {
 	mockSecretService.AssertExpectations(t)
 }
 
-func TestSMTPEmailService_SendEmail_ErrorConvertingRecipients(t *testing.T) {
+func TestSMTPEmailServiceSendEmailErrorConvertingRecipients(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   "smtp.test.com",
+		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
@@ -219,7 +255,13 @@ func TestSMTPEmailService_SendEmail_ErrorConvertingRecipients(t *testing.T) {
 	}
 
 	// Probar un destinatario mal formado
-	err := service.SendEmail("sender@test.com", string([]byte{0x7f}), "Test Subject", "Test Body", "test-message-id")
+	err := service.SendEmail(
+		senderEmailTest,
+		string([]byte{0x7f}),
+		testSubject,
+		testBody,
+		testMessageID,
+	)
 
 	// Verificar que se retorne el error esperado
 	assert.Error(t, err)

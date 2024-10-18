@@ -144,7 +144,7 @@ func TestNewSession_Success(t *testing.T) {
 //}
 
 // TestInitDB_Success prueba la inicialización exitosa de la base de datos
-func TestInitDB_Success(t *testing.T) {
+func TestInitDBSuccess(t *testing.T) {
 	mockDBManager := new(MockDBManager)
 	mockDBManager.On("InitDB", "test").Return(nil)
 
@@ -157,7 +157,7 @@ func TestInitDB_Success(t *testing.T) {
 }
 
 // TestInitDB_Error prueba la inicialización fallida de la base de datos
-func TestInitDB_Error(t *testing.T) {
+func TestInitDBError(t *testing.T) {
 	mockDBManager := new(MockDBManager)
 	mockDBManager.On("InitDB", "test").Return(errors.New("database error"))
 
@@ -170,7 +170,7 @@ func TestInitDB_Error(t *testing.T) {
 }
 
 // TestCloseDB_Success prueba el cierre exitoso de la base de datos
-func TestCloseDB_Success(t *testing.T) {
+func TestCloseDBSuccess(t *testing.T) {
 	mockDBManager := new(MockDBManager)
 	mockDBManager.On("CloseDB", "test")
 
@@ -181,7 +181,7 @@ func TestCloseDB_Success(t *testing.T) {
 }
 
 // TestGetDB_Success prueba la obtención exitosa de la base de datos
-func TestGetDB_Success(t *testing.T) {
+func TestGetDBSuccess(t *testing.T) {
 	mockDBManager := new(MockDBManager)
 	mockDB := &gorm.DB{}
 	mockDBManager.On("GetDB").Return(mockDB)
@@ -195,7 +195,7 @@ func TestGetDB_Success(t *testing.T) {
 }
 
 // TestGetDB_Error prueba la obtención fallida de la base de datos
-func TestGetDB_Error(t *testing.T) {
+func TestGetDBError(t *testing.T) {
 	mockDBManager := new(MockDBManager)
 	mockDBManager.On("GetDB").Return(nil)
 
@@ -207,7 +207,7 @@ func TestGetDB_Error(t *testing.T) {
 	mockDBManager.AssertExpectations(t)
 }
 
-func TestNewSession_ErrorCase(t *testing.T) {
+func TestNewSessionErrorCase(t *testing.T) {
 	// Simular un entorno donde falla la sesión
 	os.Setenv("APP_ENV", "production")
 
@@ -218,7 +218,7 @@ func TestNewSession_ErrorCase(t *testing.T) {
 	assert.NoError(t, err, "Se esperaba que la sesión se creara sin errores en producción")
 }
 
-func TestDBManager_OpenConnectionError(t *testing.T) {
+func TestDBManagerOpenConnectionError(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	mockSecretService.On("GetSecret", "some_secret", "testMessageID").
 		Return(&SecretData{Username: "dbuser", Password: "dbpassword"}, nil)
@@ -247,7 +247,7 @@ func TestDBManager_OpenConnectionError(t *testing.T) {
 	assert.Error(t, err, "Se esperaba un error al abrir la conexión a la base de datos")
 }
 
-func TestDBManager_InitDB_SecretError(t *testing.T) {
+func TestDBManagerInitDB_SecretError(t *testing.T) {
 	// Simular las variables de entorno necesarias
 	os.Setenv("SECRETS_DB", "some_secret") // Asegúrate de que esta variable no esté vacía
 
@@ -265,7 +265,7 @@ func TestDBManager_InitDB_SecretError(t *testing.T) {
 	mockSecretService.AssertExpectations(t)
 }
 
-func TestSecretService_GetSecret_Error(t *testing.T) {
+func TestSecretServiceGetSecret_Error(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	mockSecretService.On("GetSecret", "invalid_secret", "testMessageID").
 		Return(nil, errors.New("secreto no encontrado"))
@@ -279,7 +279,7 @@ func TestSecretService_GetSecret_Error(t *testing.T) {
 	mockSecretService.AssertExpectations(t)
 }
 
-func TestDBManager_CloseDBError(t *testing.T) {
+func TestDBManagerCloseDBError(t *testing.T) {
 	// Crear un mock de DBManager
 	mockDBManager := new(MockDBManager)
 
@@ -294,7 +294,7 @@ func TestDBManager_CloseDBError(t *testing.T) {
 	mockDBManager.AssertExpectations(t)
 }
 
-func TestSecretService_EmptySecret(t *testing.T) {
+func TestSecretServiceEmptySecret(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	mockSecretService.On("GetSecret", "", "testMessageID").
 		Return(nil, errors.New("el nombre del secreto no puede estar vacío"))
@@ -306,7 +306,7 @@ func TestSecretService_EmptySecret(t *testing.T) {
 	mockSecretService.AssertExpectations(t)
 }
 
-func TestGetSecret_Error(t *testing.T) {
+func TestGetSecretError(t *testing.T) {
 	mockService := new(MockSecretService)
 
 	// Configura el mock para que acepte dos argumentos: secretName y messageID
@@ -331,7 +331,7 @@ func TestNewSecretService(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestGetSecret_EmptySecretName(t *testing.T) {
+func TestGetSecretEmptySecretName(t *testing.T) {
 	secretService := &SecretServiceImpl{}
 
 	// Llamar a GetSecret con un nombre de secreto vacío
@@ -343,7 +343,7 @@ func TestGetSecret_EmptySecretName(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestDBManager_GetDB(t *testing.T) {
+func TestDBManagerGetDB(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	dbManager := NewDBManager(mockSecretService, nil)
 
@@ -356,7 +356,7 @@ func TestDBManager_GetDB(t *testing.T) {
 	assert.Equal(t, mockDB, result)
 }
 
-func TestDBManager_CloseDB_NotInitialized(t *testing.T) {
+func TestDBManagerCloseDB_NotInitialized(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	dbManager := NewDBManager(mockSecretService, nil)
 
@@ -373,7 +373,7 @@ func TestDBManager_CloseDB_NotInitialized(t *testing.T) {
 
 }
 
-func TestGetSecret_NullSecretString(t *testing.T) {
+func TestGetSecretNullSecretString(t *testing.T) {
 	mockService := new(MockSecretService)
 	mockService.On(
 		"GetSecret",
@@ -414,7 +414,7 @@ func TestLocalStack(t *testing.T) {
 	assert.NotNil(t, session)
 }
 
-func TestDBManager_InitDB_Success(t *testing.T) {
+func TestDBManagerInitDB_Success(t *testing.T) {
 	// Configurar las variables de entorno necesarias
 	os.Setenv("DB_HOST", "localhost")
 	os.Setenv("DB_PORT", "5432")
@@ -465,7 +465,7 @@ func TestDBManager_InitDB_Success(t *testing.T) {
 
 }
 
-func TestNewSession_LocalEnvironment(t *testing.T) {
+func TestNewSessionLocalEnvironment(t *testing.T) {
 	// Set the environment variable to "local"
 	os.Setenv("APP_ENV", "local")
 
@@ -477,7 +477,7 @@ func TestNewSession_LocalEnvironment(t *testing.T) {
 	assert.NotNil(t, sess)
 }
 
-func TestNewSession_RemoteEnvironment(t *testing.T) {
+func TestNewSessionRemoteEnvironment(t *testing.T) {
 	// Set the environment variable to "production"
 	os.Setenv("APP_ENV", "production")
 
@@ -489,7 +489,7 @@ func TestNewSession_RemoteEnvironment(t *testing.T) {
 	assert.NotNil(t, sess)
 }
 
-func TestGetSecret_AWSSessionError(t *testing.T) {
+func TestGetSecretAWSSessionError(t *testing.T) {
 	// Simular un error en la creación de la sesión de AWS
 	mockService := new(MockSecretService)
 	mockService.On(

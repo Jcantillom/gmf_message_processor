@@ -9,18 +9,25 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	memoria                        = ":memory:"
+	mensajeErrorDatabaseConnection = "Error al conectar a la base de datos en memoria: %v"
+	mensajeErrorInstancia          = "Error al obtener instancia de DB para cerrar la conexión: %v"
+	plantillaID                    = "plantilla-1"
+)
+
 func TestCheckPlantillaExists(t *testing.T) {
 	// Crear una base de datos en memoria usando SQLite
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(memoria), &gorm.Config{})
 	if err != nil {
-		t.Fatalf("Error al conectar a la base de datos en memoria: %v", err)
+		t.Fatalf(mensajeErrorDatabaseConnection, err)
 	}
 
 	// Limpiar después de la prueba
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
 		if err != nil {
-			t.Fatalf("Error al obtener instancia de DB para cerrar la conexión: %v", err)
+			t.Fatalf(mensajeErrorInstancia, err)
 		}
 		sqlDB.Close()
 	})
@@ -36,7 +43,7 @@ func TestCheckPlantillaExists(t *testing.T) {
 
 	// Insertar plantilla de prueba
 	plantilla := models.Plantilla{
-		IDPlantilla: "plantilla-1",
+		IDPlantilla: plantillaID,
 		Asunto:      "Asunto de Prueba",
 		Cuerpo:      "Cuerpo de Prueba",
 	}
@@ -46,7 +53,7 @@ func TestCheckPlantillaExists(t *testing.T) {
 	}
 
 	// Verificar que la plantilla exista
-	existe, _, err := repo.CheckPlantillaExists("plantilla-1")
+	existe, _, err := repo.CheckPlantillaExists(plantillaID)
 	if err != nil {
 		t.Fatalf("Error al verificar la existencia de la plantilla: %v", err)
 	}
@@ -65,17 +72,16 @@ func TestCheckPlantillaExists(t *testing.T) {
 	}
 }
 
-func TestCheckPlantillaExists_Error(t *testing.T) {
+func TestCheckPlantillaExistsError(t *testing.T) {
 	// Crear una base de datos en memoria usando SQLite
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(memoria), &gorm.Config{})
 	if err != nil {
-		t.Fatalf("Error al conectar a la base de datos en memoria: %v", err)
+		t.Fatalf(mensajeErrorDatabaseConnection, err)
 	}
 
 	// Crear instancia de GormPlantillaRepository
 	repo := NewPlantillaRepository(db)
 
-	// Simular un error en la consulta utilizando el método de callback de GORM
 	db.Callback().Query().Replace("gorm:query", func(tx *gorm.DB) {
 		tx.AddError(errors.New("error simulado"))
 	})
@@ -87,9 +93,9 @@ func TestCheckPlantillaExists_Error(t *testing.T) {
 	}
 }
 
-func TestCheckPlantillaExists_DatabaseConnectionError(t *testing.T) {
+func TestCheckPlantillaExistsDatabaseConnectionError(t *testing.T) {
 	// Crear una base de datos en memoria usando SQLite
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(memoria), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Error al conectar a la base de datos en memoria: %v", err)
 	}
@@ -98,7 +104,7 @@ func TestCheckPlantillaExists_DatabaseConnectionError(t *testing.T) {
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
 		if err != nil {
-			t.Fatalf("Error al obtener instancia de DB para cerrar la conexión: %v", err)
+			t.Fatalf(mensajeErrorInstancia, err)
 		}
 		sqlDB.Close()
 	})
@@ -106,7 +112,7 @@ func TestCheckPlantillaExists_DatabaseConnectionError(t *testing.T) {
 	// Cerrar la conexión a la base de datos para simular el error
 	sqlDB, err := db.DB()
 	if err != nil {
-		t.Fatalf("Error al obtener instancia de DB para cerrar la conexión: %v", err)
+		t.Fatalf(mensajeErrorDatabaseConnection, err)
 	}
 	sqlDB.Close()
 

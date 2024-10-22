@@ -16,8 +16,13 @@ import (
 )
 
 func main() {
+	sess, err := connection.NewSession("initMessageID")
+	if err != nil {
+		logs.LogError("Error al crear la sesión de AWS", err, "initMessageID")
+		return
+	}
 	// Inicializar servicios
-	secretService := connection.NewSecretService()
+	secretService := connection.NewSecretService(sess)
 
 	// Crear un logger de GORM
 	newLogger := logger.New(

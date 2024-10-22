@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
 	"gmf_message_processor/internal/logs"
 )
 
@@ -16,7 +18,9 @@ type SecretService interface {
 }
 
 // SecretServiceImpl es la implementación de SecretService
-type SecretServiceImpl struct{}
+type SecretServiceImpl struct {
+	secretsmanager secretsmanageriface.SecretsManagerAPI
+}
 
 // SecretData estructura para almacenar los datos del secreto
 type SecretData struct {
@@ -25,8 +29,10 @@ type SecretData struct {
 }
 
 // NewSecretService crea una nueva instancia de SecretService
-func NewSecretService() SecretService {
-	return &SecretServiceImpl{}
+func NewSecretService(sess *session.Session) SecretService {
+	return &SecretServiceImpl{
+		secretsmanager: secretsmanager.New(sess),
+	}
 }
 
 // GetSecret obtiene el secreto de AWS Secrets Manager o LocalStack
@@ -35,20 +41,13 @@ func (s *SecretServiceImpl) GetSecret(secretName string, messageID string) (*Sec
 		logs.LogError("El nombre del secreto no puede estar vacío", nil, messageID)
 		return nil, errors.New("el nombre del secreto no puede estar vacío")
 	}
-	// Crear sesión de AWS
-	sess, err := NewSession(messageID)
-	if err != nil {
-		logs.LogError("Error al crear la sesión de AWS", err, messageID)
-		return nil, fmt.Errorf("error al crear la sesión de AWS: %w", err)
-	}
 
-	svc := secretsmanager.New(sess)
+	// El cliente inyectado de Secrets Manager se usa en lugar de crear uno nuevo aquí
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(secretName),
 	}
 
-	// Intentar obtener el secreto
-	result, err := svc.GetSecretValue(input)
+	result, err := s.secretsmanager.GetSecretValue(input)
 	if err != nil {
 		// Verificar si es un error de secreto no encontrado
 		var awsErr awserr.Error
@@ -60,13 +59,11 @@ func (s *SecretServiceImpl) GetSecret(secretName string, messageID string) (*Sec
 		return nil, fmt.Errorf("error al obtener el secreto: %w", err)
 	}
 
-	// Validar que el SecretString no sea nil antes de desreferenciarlo
 	if result.SecretString == nil {
 		logs.LogError("El secreto es nulo", nil, messageID)
 		return nil, fmt.Errorf("el secreto '%s' es nulo", secretName)
 	}
 
-	// Deserializar el contenido del secreto
 	var secretData SecretData
 	if err := json.Unmarshal([]byte(*result.SecretString), &secretData); err != nil {
 		logs.LogError("Error al deserializar el secreto", err, messageID)

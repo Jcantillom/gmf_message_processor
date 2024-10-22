@@ -2,8 +2,16 @@ package connection
 
 import (
 	"errors"
+	"fmt"
 	"github.com/DATA-DOG/go-sqlmock"
+	awsV2 "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
+	"github.com/joho/godotenv"
+	"gmf_message_processor/internal/logs"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -16,6 +24,19 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// ======================= Constantes =======================
+const (
+	selectVersionQuery     = "SELECT version()"
+	logErrorSession        = "error al crear la sesión"
+	logExpectedMock        = "No se cumplieron las expectativas del mock"
+	awsRegion              = "us-east-1"
+	logSecretoNoEncontrado = "secreto no encontrado"
+	testSecretName         = "test-secret"
+	test                   = "test"
+	dsnString              = "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC"
+	envPath                = "../.env"
+)
+
 /*
 =======================================
 |         MOCK DE SECRET SERVICE      |
@@ -25,10 +46,11 @@ type MockSecretService struct {
 	mock.Mock
 }
 
-func (m *MockSecretService) GetSecret(secretName string, messageID string) (*SecretData, error) {
+func (m *MockSecretService) GetSecret(
+	secretName string, messageID string) (*SecretData, error) {
 	args := m.Called(secretName, messageID)
-	if secretData, ok := args.Get(0).(*SecretData); ok {
-		return secretData, args.Error(1)
+	if secret, ok := args.Get(0).(*SecretData); ok {
+		return secret, args.Error(1)
 	}
 	return nil, args.Error(1)
 }
@@ -116,94 +138,101 @@ func (m *MockDB) Open(dsn string) (*gorm.DB, error) {
 
 /*
 =======================================
+|      MOCK DE SECRETS MANAGER        |
+=======================================
+*/
+
+type MockSecretsManager struct {
+	mock.Mock
+	secretsmanageriface.SecretsManagerAPI
+}
+
+func (m *MockSecretsManager) GetSecretValue(
+	input *secretsmanager.GetSecretValueInput) (*secretsmanager.GetSecretValueOutput, error) {
+	args := m.Called(input)
+	if output := args.Get(0); output != nil {
+		return output.(*secretsmanager.GetSecretValueOutput), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+// ======================= Funciones Auxiliares =======================
+func setupEnv() {
+	os.Setenv("DB_HOST", "localhost")
+	os.Setenv("DB_PORT", "5432")
+	os.Setenv("DB_NAME", "testdb")
+	os.Setenv("SECRETS_DB", "some_secret")
+	os.Setenv("APP_ENV", "development")
+}
+
+func createMockSecretService() *MockSecretService {
+	mockService := new(MockSecretService)
+	mockService.On("GetSecret", "some_secret", "testMessageID").
+		Return(&SecretData{Username: "testuser", Password: "testpassword"}, nil)
+	return mockService
+}
+
+func createGormLogger() logger.Interface {
+	return logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
+		SlowThreshold:             time.Second,
+		LogLevel:                  logger.Warn,
+		IgnoreRecordNotFoundError: true,
+		Colorful:                  true,
+	})
+}
+
+/*
+=======================================
 |              TEST CASES             |
 =======================================
 */
+
+// Función para simular una sesión de AWS
+func mockAWSSession() *session.Session {
+	sess, _ := session.NewSession(&aws.Config{
+		Region: aws.String(awsRegion),
+	})
+	return sess
+}
+
 // TestNewSession éxito
-func TestNewSession_Success(t *testing.T) {
+func TestNewSessionSuccess(t *testing.T) {
 	// Simular una sesión de AWS
-	_, err := NewSession("test")
+	_, err := NewSession(test)
 
 	assert.NoError(t, err)
 }
 
-// TestNewSession_error (puedes usar un mock para probar el error)
-//func TestNewSession_Error(t *testing.T) {
-//	mockService := new(MockSecretService)
-//	mockService.On(
-//		"GetSecret", "test", "test").Return((*SecretData)(nil), errors.New("secret not found"))
-//
-//	// Llamar al método con ambos argumentos
-//	result, err := mockService.GetSecret("test", "test")
-//
-//	// Verificar resultados
-//	assert.Error(t, err)
-//	assert.Nil(t, result)
-//
-//	mockService.AssertExpectations(t)
-//}
-
 // TestInitDB_Success prueba la inicialización exitosa de la base de datos
 func TestInitDBSuccess(t *testing.T) {
-	mockDBManager := new(MockDBManager)
-	mockDBManager.On("InitDB", "test").Return(nil)
+	setupEnv()
+	mockService := createMockSecretService()
+	dbManager := NewDBManager(mockService, nil)
 
-	// Llamar al método
-	err := mockDBManager.InitDB("test")
-
-	// Verificar resultados
+	mockDB, mock, err := sqlmock.New()
 	assert.NoError(t, err)
-	mockDBManager.AssertExpectations(t)
+
+	dialector := postgres.New(postgres.Config{Conn: mockDB})
+	logger := createGormLogger()
+
+	err = dbManager.openConnection(dialector, logger, "testMessageID")
+	assert.NoError(t, err)
+
+	mock.ExpectClose()
+	err = mockDB.Close()
+	assert.NoError(t, err)
 }
 
 // TestInitDB_Error prueba la inicialización fallida de la base de datos
 func TestInitDBError(t *testing.T) {
 	mockDBManager := new(MockDBManager)
-	mockDBManager.On("InitDB", "test").Return(errors.New("database error"))
+	mockDBManager.On("InitDB", test).Return(errors.New("database error"))
 
 	// Llamar al método
-	err := mockDBManager.InitDB("test")
+	err := mockDBManager.InitDB(test)
 
 	// Verificar resultados
 	assert.Error(t, err)
-	mockDBManager.AssertExpectations(t)
-}
-
-// TestCloseDB_Success prueba el cierre exitoso de la base de datos
-func TestCloseDBSuccess(t *testing.T) {
-	mockDBManager := new(MockDBManager)
-	mockDBManager.On("CloseDB", "test")
-
-	// Llamar al método
-	mockDBManager.CloseDB("test")
-
-	mockDBManager.AssertExpectations(t)
-}
-
-// TestGetDB_Success prueba la obtención exitosa de la base de datos
-func TestGetDBSuccess(t *testing.T) {
-	mockDBManager := new(MockDBManager)
-	mockDB := &gorm.DB{}
-	mockDBManager.On("GetDB").Return(mockDB)
-
-	// Ejecutar GetDB
-	result := mockDBManager.GetDB()
-
-	// Verificar que devuelva la instancia de la base de datos
-	assert.NotNil(t, result)
-	mockDBManager.AssertExpectations(t)
-}
-
-// TestGetDB_Error prueba la obtención fallida de la base de datos
-func TestGetDBError(t *testing.T) {
-	mockDBManager := new(MockDBManager)
-	mockDBManager.On("GetDB").Return(nil)
-
-	// Ejecutar GetDB
-	result := mockDBManager.GetDB()
-
-	// Verificar que devuelva nil
-	assert.Nil(t, result)
 	mockDBManager.AssertExpectations(t)
 }
 
@@ -218,36 +247,7 @@ func TestNewSessionErrorCase(t *testing.T) {
 	assert.NoError(t, err, "Se esperaba que la sesión se creara sin errores en producción")
 }
 
-func TestDBManagerOpenConnectionError(t *testing.T) {
-	mockSecretService := new(MockSecretService)
-	mockSecretService.On("GetSecret", "some_secret", "testMessageID").
-		Return(&SecretData{Username: "dbuser", Password: "dbpassword"}, nil)
-
-	dbManager := NewDBManager(mockSecretService, nil)
-
-	// Mockear la variable de entorno DB_HOST incorrectamente para que falle la conexión
-	os.Setenv("DB_HOST", "invalid_host")
-
-	// Sobrescribir el logger de GORM
-	newLogger := logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
-		SlowThreshold:             time.Second,
-		LogLevel:                  logger.Warn,
-		IgnoreRecordNotFoundError: true,
-		Colorful:                  true,
-	})
-
-	// Simular la falla en la conexión
-	err := dbManager.openConnection(
-		postgres.Open("host=invalid_host port=5432 user=dbuser password=dbpassword dbname=testdb sslmode=require"),
-		newLogger,
-		"testMessageID",
-	)
-
-	// Verificar que se devuelva un error
-	assert.Error(t, err, "Se esperaba un error al abrir la conexión a la base de datos")
-}
-
-func TestDBManagerInitDB_SecretError(t *testing.T) {
+func TestDBManagerInitDBSecretError(t *testing.T) {
 	// Simular las variables de entorno necesarias
 	os.Setenv("SECRETS_DB", "some_secret") // Asegúrate de que esta variable no esté vacía
 
@@ -265,10 +265,10 @@ func TestDBManagerInitDB_SecretError(t *testing.T) {
 	mockSecretService.AssertExpectations(t)
 }
 
-func TestSecretServiceGetSecret_Error(t *testing.T) {
+func TestSecretServiceGetSecretError(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	mockSecretService.On("GetSecret", "invalid_secret", "testMessageID").
-		Return(nil, errors.New("secreto no encontrado"))
+		Return(nil, errors.New(logSecretoNoEncontrado))
 
 	// Llamar al método
 	secret, err := mockSecretService.GetSecret("invalid_secret", "testMessageID")
@@ -294,41 +294,19 @@ func TestDBManagerCloseDBError(t *testing.T) {
 	mockDBManager.AssertExpectations(t)
 }
 
-func TestSecretServiceEmptySecret(t *testing.T) {
-	mockSecretService := new(MockSecretService)
-	mockSecretService.On("GetSecret", "", "testMessageID").
-		Return(nil, errors.New("el nombre del secreto no puede estar vacío"))
-
-	secret, err := mockSecretService.GetSecret("", "testMessageID")
-
-	assert.Nil(t, secret)
-	assert.Error(t, err, "Se esperaba un error cuando el nombre del secreto está vacío")
-	mockSecretService.AssertExpectations(t)
-}
-
 func TestGetSecretError(t *testing.T) {
 	mockService := new(MockSecretService)
 
 	// Configura el mock para que acepte dos argumentos: secretName y messageID
-	mockService.On("GetSecret", "test-secret", "test").Return((*SecretData)(nil), errors.New("secret not found"))
+	mockService.On("GetSecret", testSecretName, test).Return((*SecretData)(nil), errors.New("secret not found"))
 
 	// Llamar al método con ambos argumentos
-	result, err := mockService.GetSecret("test-secret", "test")
+	result, err := mockService.GetSecret(testSecretName, test)
 
 	// Verificar resultados
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	mockService.AssertExpectations(t)
-}
-
-func TestNewSecretService(t *testing.T) {
-	// Llamar a NewSecretService
-	service := NewSecretService()
-
-	// Verificar que el resultado no sea nulo y sea de tipo SecretService
-	assert.NotNil(t, service)
-	_, ok := service.(*SecretServiceImpl)
-	assert.True(t, ok)
 }
 
 func TestGetSecretEmptySecretName(t *testing.T) {
@@ -356,7 +334,7 @@ func TestDBManagerGetDB(t *testing.T) {
 	assert.Equal(t, mockDB, result)
 }
 
-func TestDBManagerCloseDB_NotInitialized(t *testing.T) {
+func TestDBManagerCloseDBNotInitialized(t *testing.T) {
 	mockSecretService := new(MockSecretService)
 	dbManager := NewDBManager(mockSecretService, nil)
 
@@ -373,35 +351,6 @@ func TestDBManagerCloseDB_NotInitialized(t *testing.T) {
 
 }
 
-func TestGetSecretNullSecretString(t *testing.T) {
-	mockService := new(MockSecretService)
-	mockService.On(
-		"GetSecret",
-		"test",
-		"test").Return(&SecretData{Username: "test", Password: "test"}, nil)
-
-	// Llamar al método con ambos argumentos
-	result, err := mockService.GetSecret("test", "test")
-
-	// Verificar resultados
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "test", result.Username)
-	assert.Equal(t, "test", result.Password)
-
-	mockService.AssertExpectations(t)
-}
-
-func TestNewDBManager(t *testing.T) {
-	mockService := new(MockSecretService)
-	dbManager := NewDBManager(mockService, nil)
-
-	// Verificar que la instancia de DBManager no sea nula
-	assert.NotNil(t, dbManager)
-	assert.Equal(t, mockService, dbManager.SecretService)
-
-}
-
 func TestLocalStack(t *testing.T) {
 	// Simular un entorno local
 	os.Setenv("APP_ENV", "local")
@@ -414,7 +363,7 @@ func TestLocalStack(t *testing.T) {
 	assert.NotNil(t, session)
 }
 
-func TestDBManagerInitDB_Success(t *testing.T) {
+func TestDBManagerInitDBSuccess(t *testing.T) {
 	// Configurar las variables de entorno necesarias
 	os.Setenv("DB_HOST", "localhost")
 	os.Setenv("DB_PORT", "5432")
@@ -457,7 +406,7 @@ func TestDBManagerInitDB_Success(t *testing.T) {
 
 	// Verificar que se haya llamado a Open con el DSN correcto
 	mock.ExpectClose()
-	mock.ExpectExec("SELECT version()").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(selectVersionQuery).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// Cerrar la conexión
 	err = mockDB.Close()
@@ -495,11 +444,11 @@ func TestGetSecretAWSSessionError(t *testing.T) {
 	mockService.On(
 		"GetSecret",
 		"some_secret",
-		"testMessageID").Return(nil, errors.New("error al crear la sesión"))
+		"testMessageID").Return(nil, errors.New(logErrorSession))
 
 	// Sobrescribir la función NewSession para devolver un error
 	mockNewSession := func(messageID string) (*session.Session, error) {
-		return nil, errors.New("error al crear la sesión")
+		return nil, errors.New(logErrorSession)
 	}
 
 	// Llamar al método con el error simulado
@@ -507,5 +456,501 @@ func TestGetSecretAWSSessionError(t *testing.T) {
 
 	// Verificar que se devuelve un error
 	assert.Error(t, err)
-	assert.EqualError(t, err, "error al crear la sesión")
+	assert.EqualError(t, err, logErrorSession)
+}
+
+func TestBuildDSNSSLModeDefault(t *testing.T) {
+	// Cargar las variables del archivo .env.test
+	err := godotenv.Load(envPath)
+	if err != nil {
+		t.Fatalf("No se pudo cargar el archivo .env.test: %v", err)
+	}
+
+	// Simular los datos secretos
+	secretData := &SecretData{
+		Username: os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
+	}
+
+	// Construir el DSN utilizando las variables de entorno cargadas
+	dsn := buildDSN(secretData)
+
+	// Crear dinámicamente el DSN esperado a partir de las mismas variables
+	expectedDSN := fmt.Sprintf(
+		dsnString,
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_NAME"),
+		os.Getenv("DB_SSLMODE"),
+	)
+
+	// Verificar que el DSN generado coincide con el esperado
+	assert.Equal(t, expectedDSN, dsn, "El DSN generado no coincide con el esperado")
+}
+
+func TestCloseDBError(t *testing.T) {
+	mockSecretService := new(MockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
+
+	// Crear un mock de SQL y simular un error al cerrar la conexión
+	mockDB, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+
+	dbManager.DB, _ = gorm.Open(postgres.New(postgres.Config{Conn: mockDB}), &gorm.Config{})
+
+	sqlDB, err := dbManager.DB.DB()
+	assert.NoError(t, err)
+
+	// Configurar el mock para devolver un error al cerrar
+	mock.ExpectClose().WillReturnError(fmt.Errorf("error al cerrar la conexión"))
+
+	// Llamar a Close y verificar que el error se registre
+	err = sqlDB.Close()
+	if err != nil {
+		logs.LogError("Error al cerrar la conexión de la base de datos", err, "testMessageID")
+	}
+
+	assert.Error(t, err, "Se esperaba un error al cerrar la conexión de la base de datos")
+	assert.NoError(t, mock.ExpectationsWereMet(), logExpectedMock)
+}
+
+func TestGetDBConnectionError(t *testing.T) {
+	// Crear un mock de DBManager
+	mockSecretService := new(MockSecretService)
+	dbManager := NewDBManager(mockSecretService, nil)
+
+	// Simular que la base de datos no está inicializada
+	dbManager.DB = nil
+
+	// Intentar obtener la conexión y verificar que no se produce un panic
+	if dbManager.GetDB() == nil {
+		t.Log("La conexión a la base de datos es nil, como se esperaba")
+	} else {
+		sqlDB, err := dbManager.GetDB().DB()
+		assert.Nil(t, sqlDB, "La conexión SQL debería ser nil")
+		assert.Error(t, err, "Se esperaba un error al obtener la conexión de la base de datos")
+	}
+}
+
+func TestBuildDSNAndOpenConnectionExplicitCoverage(t *testing.T) {
+
+	err := godotenv.Load(envPath)
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	// Crear un mock para SecretService
+	mockSecretService := new(MockSecretService)
+	mockSecretService.On("GetSecret", "some_secret", "testMessageID").
+		Return(&SecretData{Username: "postgres", Password: "postgres"}, nil)
+
+	// Crear una instancia de DBManager
+	dbManager := NewDBManager(mockSecretService, nil)
+
+	// Crear un mock de SQL usando sqlmock
+	mockDB, mock, err := sqlmock.New()
+	assert.NoError(t, err, "No se esperaba un error al crear el mock de SQL")
+
+	// Configurar el dialector de GORM usando el mockDB
+	dialector := postgres.New(postgres.Config{
+		Conn: mockDB,
+	})
+
+	// Crear un logger de GORM
+	mockLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		},
+	)
+
+	// Llamar explícitamente a buildDSN
+	dsn := buildDSN(&SecretData{Username: "postgres", Password: "postgres"})
+	expectedDSN := fmt.Sprintf(
+		dsnString,
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		"postgres",
+		"postgres",
+		os.Getenv("DB_NAME"),
+		os.Getenv("DB_SSLMODE"),
+	)
+	assert.Equal(t, expectedDSN, dsn, "El DSN generado no es el esperado")
+
+	// Configurar expectativa para una consulta de verificación
+	mock.ExpectExec(selectVersionQuery).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// Forzar el flujo para abrir la conexión usando el DSN
+	err = dbManager.openConnection(dialector, mockLogger, "testMessageID")
+	assert.NoError(t, err, "No se esperaba un error al abrir la conexión")
+
+	// Verificar que la conexión SQL se obtiene correctamente
+	sqlDB, err := dbManager.DB.DB()
+	assert.NoError(t, err, "No se esperaba un error al obtener la conexión")
+
+	// Ejecutar una consulta para validar la conexión
+	_, err = sqlDB.Exec(selectVersionQuery)
+	assert.NoError(t, err, "No se esperaba un error al ejecutar la consulta SQL")
+
+	// Configurar la expectativa de cierre
+	mock.ExpectClose()
+
+	// Cerrar la conexión y verificar errores
+	err = sqlDB.Close()
+	assert.NoError(t, err, "No se esperaba un error al cerrar la conexión")
+
+	// Verificar expectativas del mock
+	assert.NoError(t, mock.ExpectationsWereMet(), logExpectedMock)
+}
+
+func TestGetSecret(t *testing.T) {
+	mockService := createMockSecretService()
+
+	secret, err := mockService.GetSecret("some_secret", "testMessageID")
+	assert.NoError(t, err)
+	assert.NotNil(t, secret)
+	assert.Equal(t, "testuser", secret.Username)
+	assert.Equal(t, "testpassword", secret.Password)
+
+	mockService.AssertExpectations(t)
+}
+
+func TestGetSecretSuccess(t *testing.T) {
+	// Crear el mock de Secrets Manager
+	mockSvc := new(MockSecretsManager)
+
+	// Sobrescribir la función de crear sesión si es necesario
+	originalCreateSession := CreateSession
+	defer func() { CreateSession = originalCreateSession }()
+
+	// Simular la respuesta de un secreto válido
+	secretString := `{"USERNAME": "testuser", "PASSWORD": "testpassword"}`
+	mockSvc.On("GetSecretValue", mock.Anything).Return(
+		&secretsmanager.GetSecretValueOutput{
+			SecretString: awsV2.String(secretString),
+		}, nil,
+	)
+
+	// Crear el servicio SecretService con el mock inyectado
+	secretService := &SecretServiceImpl{
+		secretsmanager: mockSvc,
+	}
+
+	// Llamar a GetSecret
+	secret, err := secretService.GetSecret(testSecretName, "testMessageID")
+
+	// Verificar que no hubo errores
+	assert.NoError(t, err)
+	assert.NotNil(t, secret)
+	assert.Equal(t, "testuser", secret.Username)
+	assert.Equal(t, "testpassword", secret.Password)
+
+	// Verificar que todas las expectativas del mock se cumplieron
+	mockSvc.AssertExpectations(t)
+}
+
+func TestGetSecretResourceNotFound(t *testing.T) {
+	// Crear un mock del cliente de SecretsManager
+	mockSvc := new(MockSecretsManager)
+
+	// Simular el error de recurso no encontrado
+	mockSvc.On("GetSecretValue", mock.Anything).Return(
+		nil, awserr.New(secretsmanager.ErrCodeResourceNotFoundException, logSecretoNoEncontrado, nil),
+	)
+
+	// Crear el servicio de secretos utilizando el mock
+	secretService := &SecretServiceImpl{
+		secretsmanager: mockSvc,
+	}
+
+	// Llamar al método y verificar el resultado
+	secret, err := secretService.GetSecret("invalid-secret", "testMessageID")
+
+	// Verificar que se devuelva el error adecuado
+	assert.Nil(t, secret)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), logSecretoNoEncontrado)
+
+	mockSvc.AssertExpectations(t)
+}
+
+func TestGetSecretNullSecretString(t *testing.T) {
+	mockSvc := new(MockSecretsManager)
+
+	// Simular que el SecretString es nil
+	mockSvc.On("GetSecretValue", mock.Anything).Return(
+		&secretsmanager.GetSecretValueOutput{
+			SecretString: nil,
+		}, nil,
+	)
+
+	secretService := &SecretServiceImpl{
+		secretsmanager: mockSvc,
+	}
+
+	// Llamar al método y verificar que se maneje el secreto nulo
+	secret, err := secretService.GetSecret(testSecretName, "testMessageID")
+
+	assert.Nil(t, secret)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "es nulo")
+
+	mockSvc.AssertExpectations(t)
+}
+
+func TestGetSecretDeserializationError(t *testing.T) {
+	mockSvc := new(MockSecretsManager)
+
+	// Simular un JSON inválido en el secreto
+	mockSvc.On("GetSecretValue", mock.Anything).Return(
+		&secretsmanager.GetSecretValueOutput{
+			SecretString: aws.String("{invalid-json}"),
+		}, nil,
+	)
+
+	secretService := &SecretServiceImpl{
+		secretsmanager: mockSvc,
+	}
+
+	secret, err := secretService.GetSecret(testSecretName, "testMessageID")
+
+	assert.Nil(t, secret)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "deserializar el secreto")
+
+	mockSvc.AssertExpectations(t)
+}
+
+func TestNewSecretServiceCreation(t *testing.T) {
+	// Crear una sesión simulada de AWS
+	mockSession, _ := session.NewSession(&aws.Config{
+		Region: aws.String(awsRegion),
+	})
+
+	// Crear el servicio con la sesión simulada
+	secretService := &SecretServiceImpl{
+		secretsmanager: secretsmanager.New(mockSession),
+	}
+
+	// Verificar que el cliente de SecretsManager no sea nulo
+	assert.NotNil(t, secretService)
+	assert.NotNil(t, secretService.secretsmanager)
+}
+
+func TestGetSecretValueError(t *testing.T) {
+	// Crear un mock del cliente de SecretsManager
+	mockSvc := new(MockSecretsManager)
+
+	// Simular un error al obtener el secreto
+	mockSvc.On("GetSecretValue", mock.Anything).Return(
+		nil, fmt.Errorf("error simulado al obtener el secreto"),
+	)
+
+	// Crear el servicio utilizando el mock
+	secretService := &SecretServiceImpl{
+		secretsmanager: mockSvc,
+	}
+
+	// Llamar al método y verificar que se maneja el error
+	secret, err := secretService.GetSecret(testSecretName, "testMessageID")
+
+	// Verificar que se registre el error y que el secreto sea nulo
+	assert.Nil(t, secret)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error al obtener el secreto")
+
+	// Verificar que el mock haya sido llamado correctamente
+	mockSvc.AssertExpectations(t)
+}
+
+func TestNewSessionError(t *testing.T) {
+	originalCreateSession := CreateSession
+	defer func() { CreateSession = originalCreateSession }()
+
+	CreateSession = func(_ ...*aws.Config) (*session.Session, error) {
+		return nil, errors.New("simulated session error")
+	}
+
+	os.Setenv("APP_ENV", "production")
+	_, err := NewSession("testMessageID")
+
+	assert.Error(t, err)
+	assert.EqualError(t, err, "simulated session error")
+}
+
+func TestDBManagerOpenConnectionError(t *testing.T) {
+	err := godotenv.Load(envPath)
+	assert.NoError(t, err)
+
+	mockService := createMockSecretService()
+	dbManager := NewDBManager(mockService, nil)
+
+	os.Setenv("DB_HOST", "invalid_host")
+	logger := createGormLogger()
+
+	dsn := fmt.Sprintf(dsnString, "invalid_host", "5432", "dbuser", "dbpassword", "testdb", "disable")
+	err = dbManager.openConnection(postgres.Open(dsn), logger, "testMessageID")
+
+	assert.Error(t, err)
+}
+
+func TestCloseDBErrorHandling(t *testing.T) {
+	mockService := createMockSecretService()
+	dbManager := NewDBManager(mockService, nil)
+
+	mockDB, _, err := sqlmock.New()
+	assert.NoError(t, err)
+
+	dbManager.DB, err = gorm.Open(postgres.New(postgres.Config{Conn: mockDB}), &gorm.Config{})
+	assert.NoError(t, err)
+
+	sqlDB, err := dbManager.DB.DB()
+	assert.NoError(t, err)
+
+	sqlDB.Close()
+
+	dbManager.CloseDB("testMessageID")
+	assert.NotNil(t, dbManager.DB)
+}
+
+// ======================= Tests Continuación =======================
+
+func TestNewDBManager(t *testing.T) {
+	mockService := createMockSecretService()
+	dbManager := NewDBManager(mockService, nil)
+
+	assert.NotNil(t, dbManager)
+	assert.Equal(t, mockService, dbManager.SecretService)
+}
+
+func TestGetDBSuccess(t *testing.T) {
+	mockDB := &gorm.DB{}
+	mockDBManager := new(MockDBManager)
+	mockDBManager.On("GetDB").Return(mockDB)
+
+	result := mockDBManager.GetDB()
+	assert.NotNil(t, result)
+
+	mockDBManager.AssertExpectations(t)
+}
+
+func TestGetDBError(t *testing.T) {
+	mockDBManager := new(MockDBManager)
+	mockDBManager.On("GetDB").Return(nil)
+
+	result := mockDBManager.GetDB()
+	assert.Nil(t, result)
+
+	mockDBManager.AssertExpectations(t)
+}
+
+func TestCloseDBSuccess(t *testing.T) {
+	mockDBManager := new(MockDBManager)
+	mockDBManager.On("CloseDB", "testMessageID").Return()
+
+	mockDBManager.CloseDB("testMessageID")
+	mockDBManager.AssertExpectations(t)
+}
+
+func TestLocalStackSession(t *testing.T) {
+	os.Setenv("APP_ENV", "local")
+	session, err := NewSession("testMessageID")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, session)
+}
+
+func TestRemoteSessionProduction(t *testing.T) {
+	os.Setenv("APP_ENV", "production")
+	session, err := NewSession("testMessageID")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, session)
+}
+
+func TestSecretNotFoundError(t *testing.T) {
+	mockSvc := new(MockSecretsManager)
+	mockSvc.On("GetSecretValue", mock.Anything).
+		Return(
+			nil,
+			awserr.New(secretsmanager.ErrCodeResourceNotFoundException,
+				logSecretoNoEncontrado, nil))
+
+	secretService := &SecretServiceImpl{secretsmanager: mockSvc}
+	secret, err := secretService.GetSecret("invalid-secret", "testMessageID")
+
+	assert.Nil(t, secret)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), logSecretoNoEncontrado)
+}
+
+func TestSecretServiceEmptySecret(t *testing.T) {
+	mockService := new(MockSecretService)
+	mockService.On("GetSecret", "", "testMessageID").
+		Return(nil, errors.New("el nombre del secreto no puede estar vacío"))
+
+	secret, err := mockService.GetSecret("", "testMessageID")
+
+	assert.Nil(t, secret)
+	assert.Error(t, err)
+	mockService.AssertExpectations(t)
+}
+
+func TestBuildDSNAndOpenConnectionSuccess(t *testing.T) {
+	err := godotenv.Load(envPath)
+	assert.NoError(t, err)
+
+	mockService := createMockSecretService()
+	dbManager := NewDBManager(mockService, nil)
+
+	mockDB, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+
+	dialector := postgres.New(postgres.Config{Conn: mockDB})
+	logger := createGormLogger()
+
+	dsn := buildDSN(&SecretData{Username: "postgres", Password: "postgres"})
+	expectedDSN := fmt.Sprintf(
+		dsnString,
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		"postgres", "postgres",
+		os.Getenv("DB_NAME"),
+		os.Getenv("DB_SSLMODE"))
+
+	assert.Equal(t, expectedDSN, dsn)
+
+	mock.ExpectExec(selectVersionQuery).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = dbManager.openConnection(dialector, logger, "testMessageID")
+	assert.NoError(t, err)
+
+	sqlDB, err := dbManager.DB.DB()
+	assert.NoError(t, err)
+
+	_, err = sqlDB.Exec(selectVersionQuery)
+	assert.NoError(t, err)
+
+	mock.ExpectClose()
+	err = sqlDB.Close()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet(), logExpectedMock)
+}
+
+func TestNewSecretService(t *testing.T) {
+	mockSession, err := session.NewSession(&aws.Config{Region: aws.String(awsRegion)})
+	assert.NoError(t, err)
+
+	secretService := NewSecretService(mockSession)
+	assert.NotNil(t, secretService)
+
+	serviceImpl, ok := secretService.(*SecretServiceImpl)
+	assert.True(t, ok)
+	assert.NotNil(t, serviceImpl.secretsmanager)
 }

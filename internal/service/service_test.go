@@ -28,6 +28,8 @@ func (m *MockEmailService) SendEmail(
 	destinatarios,
 	asunto,
 	cuerpo,
+	pathimage,
+	imageName,
 	messageID string) error {
 	args := m.Called(remitente, destinatarios, asunto, cuerpo)
 	return args.Error(0)

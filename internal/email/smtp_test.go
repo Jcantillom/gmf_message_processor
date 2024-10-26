@@ -2,10 +2,11 @@ package email
 
 import (
 	"errors"
+	"fmt"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
 	"gmf_message_processor/connection"
-	"net/smtp"
+	"gopkg.in/gomail.v2"
 	"testing"
 	"time"
 
@@ -22,19 +23,18 @@ func (m *MockSecretService) GetSecret(secretName string, messageID string) (*con
 	return args.Get(0).(*connection.SecretData), args.Error(1) // Retorna un puntero a SecretData
 }
 
-// Mock de smtpSendMailFunc para simular el envío de correo sin realizar la operación real.
-func mockSendMailSuccess(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	return nil // Simula éxito
-}
+type MockDialer struct{}
 
-func mockSendMailError(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	return errors.New("error enviando el correo") // Simula un error
-}
-
-// Mock para forzar un retraso, simulando un timeout.
-func mockSendMailTimeout(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	time.Sleep(100 * time.Millisecond) // Fuerza un retraso mayor al timeout del servicio
+// Simula el envío de correo sin error.
+func (d *MockDialer) DialAndSend(m ...*gomail.Message) error {
 	return nil
+}
+
+// Simula un error al enviar el correo.
+type ErrorMockDialer struct{}
+
+func (d *ErrorMockDialer) DialAndSend(m ...*gomail.Message) error {
+	return fmt.Errorf("error enviando el correo")
 }
 
 const secretName = "my-smtp-secrets"
@@ -44,6 +44,8 @@ const senderEmailTest = "sender@test.com"
 const recipientEmailTest = "recipient@test.com"
 const testSubject = "Test Subject"
 const testBody = "Test Body"
+const testPathImage = "../../images/Casitadavivienda.png"
+const testImageName = "logo.png"
 
 func TestNewSMTPEmailServiceDefaultTimeout(t *testing.T) {
 	mockSecretService := new(MockSecretService)
@@ -75,32 +77,31 @@ func TestNewSMTPEmailServiceDefaultTimeout(t *testing.T) {
 // Test que verifica el envío exitoso de un correo
 func TestSMTPEmailServiceSendEmailSuccess(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   smtpServerTest,
+		server:   "smtp.test.com",
 		port:     "587",
 		username: "user",
 		password: "pass",
-		sendMail: mockSendMailSuccess,
+		dialer:   &MockDialer{}, // Usar el mock del dialer
 		timeout:  10 * time.Second,
 	}
 
 	err := service.SendEmail(
-		senderEmailTest,
-		recipientEmailTest,
-		testSubject,
-		testBody,
-		testMessageID,
+		"sender@test.com", "recipient@test.com", "Test Subject", "Test Body",
+		"../../images/Casitadavivienda.png", "logo.png", "test-message-id",
 	)
+
 	assert.NoError(t, err)
 }
 
 // Test que verifica el manejo de timeout
 func TestSMTPEmailServiceSendEmailTimeout(t *testing.T) {
+	mockDialer := gomail.NewDialer("smtp.test.com", 587, "user", "pass")
 	service := &SMTPEmailService{
 		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
-		sendMail: mockSendMailTimeout,  // Simular un retraso largo
+		dialer:   mockDialer,
 		timeout:  1 * time.Millisecond, // Timeout muy corto para forzar el error
 	}
 
@@ -109,6 +110,8 @@ func TestSMTPEmailServiceSendEmailTimeout(t *testing.T) {
 		recipientEmailTest,
 		testSubject,
 		testBody,
+		testPathImage,
+		testImageName,
 		testMessageID,
 	)
 	assert.Error(t, err)
@@ -118,33 +121,32 @@ func TestSMTPEmailServiceSendEmailTimeout(t *testing.T) {
 // Test que verifica el manejo de error durante el envío del correo
 func TestSMTPEmailServiceSendEmailError(t *testing.T) {
 	service := &SMTPEmailService{
-		server:   smtpServerTest,
+		server:   "smtp.test.com",
 		port:     "587",
 		username: "user",
 		password: "pass",
-		sendMail: mockSendMailError, // Simular error
+		dialer:   &ErrorMockDialer{}, // Usar el mock que genera error
 		timeout:  10 * time.Second,
 	}
 
 	err := service.SendEmail(
-		senderEmailTest,
-		recipientEmailTest,
-		testSubject,
-		testBody,
-		testMessageID,
+		"sender@test.com", "recipient@test.com", "Test Subject", "Test Body",
+		"../../images/Casitadavivienda.png", "logo.png", "test-message-id",
 	)
+
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "error enviando el correo")
 }
 
 // Test que verifica la configuración incompleta del servicio SMTP
 func TestSMTPEmailServiceSendEmailIncompleteConfig(t *testing.T) {
+	mockDialer := gomail.NewDialer("smtp.test.com", 587, "user", "pass")
 	service := &SMTPEmailService{
 		server:   "",
 		port:     "",
 		username: "",
 		password: "",
-		sendMail: mockSendMailSuccess,
+		dialer:   mockDialer,
 		timeout:  10 * time.Second,
 	}
 
@@ -153,6 +155,8 @@ func TestSMTPEmailServiceSendEmailIncompleteConfig(t *testing.T) {
 		recipientEmailTest,
 		testSubject,
 		testBody,
+		testPathImage,
+		testImageName,
 		testMessageID,
 	)
 	assert.Error(t, err)
@@ -166,22 +170,28 @@ func TestSMTPEmailServiceSendEmailInvalidRecipient(t *testing.T) {
 		port:     "587",
 		username: "user",
 		password: "pass",
-		sendMail: mockSendMailSuccess,
+		dialer:   &MockDialer{}, // Usar el mock del dialer
 		timeout:  10 * time.Second,
 	}
 
 	// Caso de destinatarios vacíos
 	err := service.SendEmail(
 		senderEmailTest,
-		"",
+		"", // Destinatarios vacíos
 		testSubject,
 		testBody,
+		testPathImage,
+		testImageName,
 		testMessageID,
 	)
 
-	// Verificamos que se produzca un error por destinatarios inválidos
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error: no se especificaron destinatarios")
+	// Verificar que se genere el error esperado
+	// Verificar que se genere el error esperado
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "error: no se especificaron destinatarios")
+	} else {
+		t.Fatalf("Se esperaba un error, pero no se recibió ninguno")
+	}
 }
 
 func TestNewSMTPEmailServiceSuccess(t *testing.T) {
@@ -245,12 +255,13 @@ func TestNewSMTPEmailServiceErrorGettingSecret(t *testing.T) {
 }
 
 func TestSMTPEmailServiceSendEmailErrorConvertingRecipients(t *testing.T) {
+	mockDialer := gomail.NewDialer("smtp.test.com", 587, "user", "pass")
 	service := &SMTPEmailService{
 		server:   smtpServerTest,
 		port:     "587",
 		username: "user",
 		password: "pass",
-		sendMail: mockSendMailSuccess, // No importa el resultado del envío en este caso
+		dialer:   mockDialer,
 		timeout:  10 * time.Second,
 	}
 
@@ -260,6 +271,8 @@ func TestSMTPEmailServiceSendEmailErrorConvertingRecipients(t *testing.T) {
 		string([]byte{0x7f}),
 		testSubject,
 		testBody,
+		testPathImage,
+		testImageName,
 		testMessageID,
 	)
 

@@ -2,12 +2,15 @@ package utils
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"gmf_message_processor/internal/aws"
 	"gmf_message_processor/internal/logs"
 	"gmf_message_processor/internal/models"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strconv"
@@ -133,4 +136,13 @@ func GetMaxRetries() int {
 		return 3
 	}
 	return maxRetries
+}
+
+// ReadImageAsBase64 ...
+func ReadImageAsBase64(imagePath string) (string, error) {
+	imageBytes, err := ioutil.ReadFile(imagePath)
+	if err != nil {
+		return "", fmt.Errorf("error al leer la imagen: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(imageBytes), nil
 }

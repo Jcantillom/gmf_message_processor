@@ -20,6 +20,8 @@ type EmailService interface {
 		destinatarios,
 		asunto,
 		cuerpo,
+		imagePath,
+		imageName,
 		messageID string) error
 }
 
@@ -57,6 +59,9 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 		logs.LogError(fmt.Sprintf("La plantilla con ID %s no existe en la base de datos", msg.IDPlantilla), nil, messageID)
 		return errors.New("la plantilla no existe en la base de datos")
 	}
+	// leer la imagen desde el archivo y adjuntarla al correo
+	imagePath := "images/Casitadavivienda.png"
+	imageName := "logo.png"
 
 	// Verificar que haya al menos un conjunto de parámetros en el array
 	if len(msg.Parametro) == 0 {
@@ -77,6 +82,8 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 			plantilla.Destinatario,
 			plantilla.Asunto,
 			plantilla.Cuerpo,
+			imagePath,
+			imageName,
 			messageID)
 		if err != nil {
 			logs.LogError("Error al enviar el correo electrónico", err, messageID)
@@ -102,6 +109,8 @@ func (s *PlantillaService) HandlePlantilla(ctx context.Context, msg *models.SQSM
 		plantilla.Destinatario,
 		plantilla.Asunto,
 		plantilla.Cuerpo,
+		imagePath,
+		imageName,
 		messageID,
 	)
 	if err != nil {

@@ -51,18 +51,18 @@ func (cm *Manager) InitConfig(messageID string) {
 	// Definir las variables clave que deben estar presentes en el entorno
 	requiredEnvVars := []string{
 		"APP_ENV",
-		"SERVICE_ENV",
+		"REGION_ZONE",
 		"SECRETS_DB",
 		"SECRETS_SMTP",
 		"DB_HOST",
 		"DB_PORT",
 		"DB_NAME",
-		"DB_SCHEMA",
 		"SMTP_SERVER",
 		"SMTP_PORT",
-		"SQS_QUEUE_URL",
 		"SMTP_TIMEOUT",
-		"AWS_REGION",
+		"SQS_QUEUE_URL",
+		"SQS_MESSAGE_DELAY",
+		"MAX_RETRIES",
 	}
 
 	// Verificar si las variables clave están presentes

@@ -237,7 +237,9 @@ func setupEnvVariables() {
 	viper.Set("SMTP_PORT", "587")
 	viper.Set("SQS_QUEUE_URL", sqsQueue)
 	viper.Set("SMTP_TIMEOUT", "30")
-	viper.Set("AWS_REGION", awsRegion)
+	viper.Set("REGION_ZONE", awsRegion)
+	viper.Set("SQS_MESSAGE_DELAY", "15")
+	viper.Set("MAX_RETRIES", "3")
 }
 
 func TestInitConfigMissingEnvVarTriggersFatal(t *testing.T) {
@@ -255,6 +257,7 @@ func TestInitConfigMissingEnvVarTriggersFatal(t *testing.T) {
 				SMTP_PORT=587
 				SQS_QUEUE_URL=http://sqs-url
 				SMTP_TIMEOUT=30
+                REGION_ZONE=us-east-1
 `)
 	err := os.WriteFile(tempEnvFile, content, 0644)
 	assert.NoError(t, err)
@@ -344,7 +347,7 @@ func TestInitConfigEnvFileLoadedSuccessfully(t *testing.T) {
 	mockLogger.On("LogDebug", mock.AnythingOfType("string"), mock.Anything).Return()
 	mockLogger.On(
 		"LogError",
-		"La variable de entorno AWS_REGION no está configurada",
+		"La variable de entorno REGION_ZONE no está configurada",
 		nil, "").Return()
 
 	// Simular todas las variables de entorno requeridas
@@ -364,7 +367,7 @@ func TestInitConfigEnvFileLoadedSuccessfully(t *testing.T) {
 		"No se pudo cargar el archivo .env, se utilizarán las variables de entorno del sistema", "",
 	)
 
-	// No esperamos que LogError sea llamado ya que AWS_REGION está configurada
+	// No esperamos que LogError sea llamado ya que REGION_ZONE está configurada
 	mockLogger.AssertNotCalled(t, "LogError")
 }
 
@@ -382,6 +385,9 @@ func TestInitApplicationDBInitError(t *testing.T) {
 	os.Setenv("DB_NAME", "testdb")
 	os.Setenv("DB_SCHEMA", "public")
 	os.Setenv("SQS_QUEUE_URL", sqsQueue)
+	os.Setenv("REGION_ZONE", awsRegion)
+	os.Setenv("SQS_MESSAGE_DELAY", "15")
+	os.Setenv("MAX_RETRIES", "3")
 
 	// Mock the dependencies
 	mockDBManager := new(MockDBManager)
@@ -464,6 +470,9 @@ func TestInitApplicationNewPlantillaRepository(t *testing.T) {
 	os.Setenv("DB_NAME", "testdb")
 	os.Setenv("DB_SCHEMA", "public")
 	os.Setenv("SQS_QUEUE_URL", sqsQueue)
+	os.Setenv("REGION_ZONE", awsRegion)
+	os.Setenv("SQS_MESSAGE_DELAY", "15")
+	os.Setenv("MAX_RETRIES", "3")
 
 	// Crear un mock de SecretService
 	mockSecretService := new(MockSecretService)
@@ -520,6 +529,9 @@ func TestInitApplicationNewSQSHandler(t *testing.T) {
 	os.Setenv("DB_NAME", "testdb")
 	os.Setenv("DB_SCHEMA", "public")
 	os.Setenv("SQS_QUEUE_URL", sqsQueue)
+	os.Setenv("REGION_ZONE", awsRegion)
+	os.Setenv("SQS_MESSAGE_DELAY", "15")
+	os.Setenv("MAX_RETRIES", "3")
 
 	// Crear un mock de SecretService
 	mockSecretService := new(MockSecretService)
@@ -592,6 +604,9 @@ func TestInitApplicationEmailServiceInitialization(t *testing.T) {
 	os.Setenv("DB_NAME", "testdb")
 	os.Setenv("DB_SCHEMA", "public")
 	os.Setenv("SQS_QUEUE_URL", sqsQueue)
+	os.Setenv("REGION_ZONE", awsRegion)
+	os.Setenv("SQS_MESSAGE_DELAY", "15")
+	os.Setenv("MAX_RETRIES", "3")
 
 	// Crear un mock de SecretService y DBManager
 	mockSecretService := new(MockSecretService)
@@ -672,10 +687,10 @@ func TestGetSecretErrorFetchingSecret(t *testing.T) {
 
 func TestInitializeSQSClientError(t *testing.T) {
 	// Configurar las variables de entorno necesarias
-	os.Setenv("AWS_REGION", awsRegion)
+	os.Setenv("REGION_ZONE", awsRegion)
 	os.Setenv("SQS_QUEUE_URL", "") // Simular una URL vacía para forzar el error
 	defer func() {
-		os.Unsetenv("AWS_REGION")
+		os.Unsetenv("REGION_ZONE")
 		os.Unsetenv("SQS_QUEUE_URL")
 	}()
 
@@ -699,11 +714,11 @@ func TestInitializeSQSClientError(t *testing.T) {
 
 func TestInitializeSQSClientLocalstackEndpoint(t *testing.T) {
 	// Configura las variables de entorno necesarias
-	os.Setenv("AWS_REGION", awsRegion)
+	os.Setenv("REGION_ZONE", awsRegion)
 	os.Setenv("SQS_QUEUE_URL", sqsURL) // Simula LocalStack
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
 	defer func() {
-		os.Unsetenv("AWS_REGION")
+		os.Unsetenv("REGION_ZONE")
 		os.Unsetenv("SQS_QUEUE_URL")
 		os.Unsetenv("SQS_ENDPOINT")
 	}()
@@ -725,7 +740,7 @@ func TestInitializeSQSClientLocalstackEndpoint(t *testing.T) {
 func TestRegionNotWhenUsingLocalStack(t *testing.T) {
 	// Configurar las variables de entorno necesarias para simular LocalStack
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
-	os.Setenv("AWS_REGION", awsRegion)
+	os.Setenv("REGION_ZONE", awsRegion)
 	os.Setenv("SQS_QUEUE_URL", sqsURL) // URL válida
 
 	// Reiniciar Viper y asegurarse de que cargue las variables de entorno
@@ -749,7 +764,7 @@ func TestInitializeSQSClientDefaultRegion(t *testing.T) {
 	// Establecer las variables de entorno necesarias
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
 	os.Setenv("SQS_QUEUE_URL", sqsQueueURLTest)
-	os.Unsetenv("AWS_REGION") // Simulamos que no se establece región explícitamente
+	os.Unsetenv("REGION_ZONE") // Simulamos que no se establece región explícitamente
 
 	defer func() {
 		// Limpiar después del test
@@ -765,7 +780,7 @@ func TestInitializeSQSClientDefaultRegion(t *testing.T) {
 	client, err := initializeSQSClient("testMessageID")
 
 	// Comprobamos la región: si no está configurada, debería usar awsRegion
-	region := viper.GetString("AWS_REGION")
+	region := viper.GetString("REGION_ZONE")
 	if region == "" {
 		region = awsRegion
 	}
@@ -782,7 +797,7 @@ func TestInitializeSQSClientEndpointResolver(t *testing.T) {
 	// Configurar las variables de entorno necesarias
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
 	os.Setenv("SQS_QUEUE_URL", sqsQueueURLTest)
-	os.Unsetenv("AWS_REGION") // Para asegurarnos de que se use la región por defecto
+	os.Unsetenv("REGION_ZONE") // Para asegurarnos de que se use la región por defecto
 	defer func() {
 		os.Unsetenv("SQS_ENDPOINT")
 		os.Unsetenv("SQS_QUEUE_URL")
@@ -814,12 +829,12 @@ func TestInitializeSQSClientEndpointResolver(t *testing.T) {
 func TestInitializeSQSClientWithLocalstackEndpoint(t *testing.T) {
 	// Configurar las variables de entorno necesarias
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
-	os.Setenv("AWS_REGION", awsRegion) // Región para la firma
+	os.Setenv("REGION_ZONE", awsRegion) // Región para la firma
 	os.Setenv("SQS_QUEUE_URL", sqsQueueURLTest)
 
 	defer func() {
 		os.Unsetenv("SQS_ENDPOINT")
-		os.Unsetenv("AWS_REGION")
+		os.Unsetenv("REGION_ZONE")
 		os.Unsetenv("SQS_QUEUE_URL")
 	}()
 

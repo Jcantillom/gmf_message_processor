@@ -131,7 +131,7 @@ func getSecret(
 func initializeSQSClient(messageID string) (internalAws.SQSAPI, error) {
 	// Verificar si estamos utilizando LocalStack o AWS real
 	endpoint := viper.GetString("SQS_ENDPOINT")
-	region := viper.GetString("AWS_REGION")
+	region := viper.GetString("REGION_ZONE")
 
 	if region == "" {
 		region = "us-east-1" // Región por defecto

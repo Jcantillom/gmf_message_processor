@@ -954,3 +954,63 @@ func TestNewSecretService(t *testing.T) {
 	assert.True(t, ok)
 	assert.NotNil(t, serviceImpl.secretsmanager)
 }
+
+func TestBuildDSNDefaultSSLMode(t *testing.T) {
+	os.Unsetenv("DB_SSLMODE") // Asegurarse de que no está configurado
+	secretData := &SecretData{Username: "user", Password: "pass"}
+
+	dsn := buildDSN(secretData)
+
+	expectedDSN := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require TimeZone=UTC",
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		secretData.Username,
+		secretData.Password,
+		os.Getenv("DB_NAME"),
+	)
+
+	assert.Equal(t, expectedDSN, dsn, "El DSN generado no coincide con el esperado")
+}
+
+func TestCloseDBWithError(t *testing.T) {
+	mockService := createMockSecretService()
+	dbManager := NewDBManager(mockService, nil)
+
+	mockDB, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+
+	dbManager.DB, _ = gorm.Open(postgres.New(postgres.Config{Conn: mockDB}), &gorm.Config{})
+
+	sqlDB, err := dbManager.DB.DB()
+
+	assert.NoError(t, err)
+
+	mock.ExpectClose().WillReturnError(fmt.Errorf("error al cerrar la conexión"))
+
+	dbManager.CloseDB("testMessageID")
+
+	assert.NotNil(t, dbManager.DB)
+
+	err = sqlDB.Close()
+
+	// Verificar que el error fue registrado
+	assert.NoError(t, mock.ExpectationsWereMet(), "No se cumplieron las expectativas del mock")
+}
+
+func TestOpenConnectionError(t *testing.T) {
+	mockSecretService := createMockSecretService()
+	dbManager := NewDBManager(mockSecretService, nil)
+
+	// Crear un DSN inválido para forzar el error
+	os.Setenv("DB_HOST", "invalid_host")
+	logger := createGormLogger()
+
+	dsn := buildDSN(&SecretData{Username: "invalid", Password: "invalid"})
+
+	// Llamar a openConnection y verificar que se devuelve un error
+	err := dbManager.openConnection(postgres.Open(dsn), logger, "testMessageID")
+
+	assert.Error(t, err, "Se esperaba un error al abrir la conexión")
+	assert.Contains(t, err.Error(), "error al abrir la conexión")
+}

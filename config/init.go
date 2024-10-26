@@ -71,7 +71,7 @@ func InitApplication(
 	repo := repository.NewPlantillaRepository(dbManager.GetDB())
 
 	// Crear una instancia del servicio de correo electrónico utilizando SMTP
-	emailService, smtpErr := email.NewSMTPEmailService(secretService, messageID)
+	emailService, smtpErr := email.NewSMTPEmailService(secretService, messageID, logger)
 	if smtpErr != nil {
 		logs.LogError("Error inicializando el servicio SMTP", smtpErr, messageID)
 		return nil, smtpErr

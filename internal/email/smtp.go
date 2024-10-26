@@ -17,6 +17,10 @@ import (
 type DialerInterface interface {
 	DialAndSend(m ...*gomail.Message) error
 }
+type LoggerInterface interface {
+	LogError(message string, err error, messageID string)
+	LogInfo(message string, messageID string)
+}
 
 // SMTPEmailService implementa EmailService utilizando SMTP.
 type SMTPEmailService struct {
@@ -26,16 +30,17 @@ type SMTPEmailService struct {
 	password string
 	dialer   DialerInterface
 	timeout  time.Duration
+	logger   LoggerInterface
 }
 
 // NewSMTPEmailService crea una instancia de SMTPEmailService usando SecretService.
 func NewSMTPEmailService(
-	secretService connection.SecretService, messageID string,
+	secretService connection.SecretService, messageID string, logger LoggerInterface,
 ) (*SMTPEmailService, error) {
 	secretName := os.Getenv("SECRETS_SMTP")
 	secretData, err := secretService.GetSecret(secretName, messageID)
 	if err != nil {
-		logs.LogError("Error al obtener las credenciales SMTP desde Secrets Manager", err, messageID)
+		logger.LogError("Error al obtener las credenciales SMTP desde Secrets Manager", err, messageID)
 		return nil, err
 	}
 
@@ -57,8 +62,11 @@ func NewSMTPEmailService(
 		password: secretData.Password,
 		dialer:   dialer,
 		timeout:  time.Duration(timeoutValue) * time.Second,
+		logger:   logger, // Usamos el logger inyectable aquí
 	}, nil
 }
+
+var stat = os.Stat
 
 // SendEmail envía un correo usando el dialer configurado.
 func (s *SMTPEmailService) SendEmail(
@@ -87,8 +95,9 @@ func (s *SMTPEmailService) SendEmail(
 	m.SetHeader("Subject", asunto)
 	m.SetBody("text/html", cuerpo)
 
-	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
-		logs.LogError(fmt.Sprintf("La imagen %s no existe en la ruta proporcionada", imagePath), err, messageID)
+	if _, err := stat(imagePath); os.IsNotExist(err) {
+		s.logger.LogError(fmt.Sprintf(
+			"La imagen %s no existe en la ruta proporcionada", imagePath), err, messageID)
 		return err
 	}
 	m.Embed(imagePath, gomail.SetHeader(map[string][]string{

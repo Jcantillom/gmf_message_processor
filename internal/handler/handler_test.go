@@ -569,3 +569,50 @@ func TestPrintSQSEventErrorMarshalling(t *testing.T) {
 		t.Errorf("Expected log message to contain: %q, but got: %q", expectedMessage, loggedMessage)
 	}
 }
+
+func TestPrintSQSEventSuccess(t *testing.T) {
+	// Sobrescribimos jsonMarshalIndent para devolver un JSON con saltos de línea y tabulaciones
+	originalMarshalIndent := jsonMarshalIndent
+	defer func() { jsonMarshalIndent = originalMarshalIndent }()
+	jsonMarshalIndent = func(v interface{}, prefix, indent string) ([]byte, error) {
+		return []byte(`{
+			"Records": [
+				{
+					"MessageId": "1",
+					"Body": "{}"
+				}
+			]
+		}`), nil
+	}
+
+	// Sobrescribimos logDebug para capturar el mensaje logueado
+	var loggedMessage string
+	originalLogDebug := logDebug
+	defer func() { logDebug = originalLogDebug }()
+	logDebug = func(msg, _ string) {
+		loggedMessage = msg
+	}
+
+	// Simular un evento SQS
+	sqsEvent := events.SQSEvent{
+		Records: []events.SQSMessage{
+			{MessageId: "1", Body: "{}", ReceiptHandle: recipientHandleTest2},
+		},
+	}
+
+	// Ejecutar la función
+	printSQSEvent(sqsEvent)
+
+	// Normalizar los espacios y tabulaciones en el mensaje registrado
+	normalizedMessage := strings.ReplaceAll(loggedMessage, "\t", "")
+	normalizedMessage = strings.ReplaceAll(normalizedMessage, "\n", "")
+	normalizedMessage = strings.TrimSpace(normalizedMessage)
+
+	// Mensaje esperado sin saltos de línea ni tabulaciones
+	expectedMessage := "--- Evento SQS --- { \"Records\": [ { \"MessageId\": \"1\", \"Body\": \"{}\" } ] } --- Fin del Evento SQS ---"
+
+	// Verificar que el mensaje registrado coincida con el esperado
+	if !strings.Contains(normalizedMessage, expectedMessage) {
+		t.Errorf("Expected log message to contain: %q, but got: %q", expectedMessage, normalizedMessage)
+	}
+}

@@ -62,7 +62,7 @@ func NewSQSHandler(
 // Función principal que maneja el evento Lambda
 func (h *SQSHandler) HandleLambdaEvent(ctx context.Context, sqsEvent events.SQSEvent) error {
 	//imprime el evento
-	//printSQSEvent(sqsEvent)
+	printSQSEvent(sqsEvent)
 	for _, record := range sqsEvent.Records {
 		messageID := record.MessageId
 

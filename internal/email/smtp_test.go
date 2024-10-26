@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"gmf_message_processor/connection"
 	"gopkg.in/gomail.v2"
+	"os"
 	"testing"
 	"time"
 
@@ -23,6 +24,18 @@ func (m *MockSecretService) GetSecret(secretName string, messageID string) (*con
 	return args.Get(0).(*connection.SecretData), args.Error(1) // Retorna un puntero a SecretData
 }
 
+type MockLogger struct {
+	loggedMessage string
+}
+
+func (m *MockLogger) LogError(message string, err error, messageID string) {
+	m.loggedMessage = fmt.Sprintf("%s - %v", message, err)
+}
+
+func (m *MockLogger) LogInfo(message, messageID string) {
+	m.loggedMessage = message
+}
+
 type MockDialer struct{}
 
 // Simula el envío de correo sin error.
@@ -35,6 +48,10 @@ type ErrorMockDialer struct{}
 
 func (d *ErrorMockDialer) DialAndSend(m ...*gomail.Message) error {
 	return fmt.Errorf("error enviando el correo")
+}
+
+func mockStat(filename string) (os.FileInfo, error) {
+	return nil, os.ErrNotExist
 }
 
 const secretName = "my-smtp-secrets"
@@ -64,7 +81,7 @@ func TestNewSMTPEmailServiceDefaultTimeout(t *testing.T) {
 	t.Setenv("SMTP_PORT", "587")
 
 	// Crear el servicio
-	service, err := NewSMTPEmailService(mockSecretService, testMessageID)
+	service, err := NewSMTPEmailService(mockSecretService, testMessageID, &MockLogger{})
 
 	// Verificar que no haya error y que el timeout sea el valor por defecto (15 segundos)
 	assert.NoError(t, err)
@@ -214,7 +231,7 @@ func TestNewSMTPEmailServiceSuccess(t *testing.T) {
 	viper.Set("SMTP_TIMEOUT", "10")
 
 	// Crear el servicio
-	service, err := NewSMTPEmailService(mockSecretService, testMessageID)
+	service, err := NewSMTPEmailService(mockSecretService, testMessageID, &MockLogger{})
 
 	// Verificar que no haya error y que los valores sean correctos
 	assert.NoError(t, err)
@@ -244,7 +261,7 @@ func TestNewSMTPEmailServiceErrorGettingSecret(t *testing.T) {
 	t.Setenv("SMTP_PORT", "587")
 
 	// Crear el servicio (debe fallar)
-	service, err := NewSMTPEmailService(mockSecretService, testMessageID)
+	service, err := NewSMTPEmailService(mockSecretService, testMessageID, &MockLogger{})
 
 	// Verificar que haya un error y que el servicio sea nil
 	assert.Error(t, err)
@@ -279,4 +296,36 @@ func TestSMTPEmailServiceSendEmailErrorConvertingRecipients(t *testing.T) {
 	// Verificar que se retorne el error esperado
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "error al convertir destinatarios a JSON")
+}
+
+func TestSendEmailImageNotFound(t *testing.T) {
+	// Crear un mock del logger.
+	mockLogger := &MockLogger{}
+
+	// Crear el servicio de correo con el mock del logger.
+	service := &SMTPEmailService{
+		server:   "smtp.test.com",
+		port:     "587",
+		username: "user",
+		password: "pass",
+		dialer:   &MockDialer{},
+		timeout:  10 * time.Second,
+		logger:   mockLogger,
+	}
+
+	// Intentar enviar el correo con una imagen inexistente.
+	err := service.SendEmail(
+		"sender@test.com", "recipient@test.com", "Test Subject", "Test Body",
+		"/path/to/nonexistent-image.png", "logo.png", "test-message-id",
+	)
+
+	// Verificar que se produjo el error esperado.
+	assert.Error(t, err)
+
+	// Verificar que el mensaje registrado por el logger sea el esperado.
+	expectedMessage := "La imagen /path/to/nonexistent-image.png no existe en la ruta proporcionada"
+	assert.Contains(t, mockLogger.loggedMessage, expectedMessage)
+
+	// Verificar que el error contenga "no such file or directory".
+	assert.Contains(t, mockLogger.loggedMessage, "no such file or directory")
 }

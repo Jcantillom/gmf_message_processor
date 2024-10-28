@@ -225,7 +225,7 @@ const (
 // setupEnvVariables configura las variables de entorno necesarias para los tests.
 func setupEnvVariables() {
 	viper.Reset() // Resetea Viper para evitar conflictos en cada test
-	viper.Set("APP_ENV", "development")
+	viper.Set("APP_ENV", "local")
 	viper.Set("SERVICE_ENV", "local")
 	viper.Set("SECRETS_DB", "some_secret_value")
 	viper.Set("SECRETS_SMTP", "another")
@@ -323,7 +323,7 @@ func TestInitConfigLoadsEnvVariables(t *testing.T) {
 	manager.InitConfig("")
 
 	// Verificar que las variables clave fueron cargadas
-	assert.Equal(t, "development", viper.GetString("APP_ENV"))
+	assert.Equal(t, "local", viper.GetString("APP_ENV"))
 	assert.Equal(t, "local", viper.GetString("SERVICE_ENV"))
 
 	// Verificar que se llamó el log de debug
@@ -357,7 +357,7 @@ func TestInitConfigEnvFileLoadedSuccessfully(t *testing.T) {
 	manager.InitConfig("")
 
 	// Verificar que las variables clave fueron cargadas
-	assert.Equal(t, "development", viper.GetString("APP_ENV"))
+	assert.Equal(t, "local", viper.GetString("APP_ENV"))
 	assert.Equal(t, "local", viper.GetString("SERVICE_ENV"))
 
 	// Verificar que se llamó el log de debug
@@ -714,6 +714,7 @@ func TestInitializeSQSClientError(t *testing.T) {
 
 func TestInitializeSQSClientLocalstackEndpoint(t *testing.T) {
 	// Configura las variables de entorno necesarias
+	os.Setenv("APP_ENV", "local")
 	os.Setenv("REGION_ZONE", awsRegion)
 	os.Setenv("SQS_QUEUE_URL", sqsURL) // Simula LocalStack
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
@@ -739,6 +740,7 @@ func TestInitializeSQSClientLocalstackEndpoint(t *testing.T) {
 
 func TestRegionNotWhenUsingLocalStack(t *testing.T) {
 	// Configurar las variables de entorno necesarias para simular LocalStack
+	os.Setenv("APP_ENV", "local")
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
 	os.Setenv("REGION_ZONE", awsRegion)
 	os.Setenv("SQS_QUEUE_URL", sqsURL) // URL válida
@@ -762,6 +764,7 @@ func TestRegionNotWhenUsingLocalStack(t *testing.T) {
 
 func TestInitializeSQSClientDefaultRegion(t *testing.T) {
 	// Establecer las variables de entorno necesarias
+	os.Setenv("APP_ENV", "local")
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
 	os.Setenv("SQS_QUEUE_URL", sqsQueueURLTest)
 	os.Unsetenv("REGION_ZONE") // Simulamos que no se establece región explícitamente
@@ -795,6 +798,7 @@ func TestInitializeSQSClientDefaultRegion(t *testing.T) {
 
 func TestInitializeSQSClientEndpointResolver(t *testing.T) {
 	// Configurar las variables de entorno necesarias
+	os.Setenv("APP_ENV", "local")
 	os.Setenv("SQS_ENDPOINT", sqsEndpoint)
 	os.Setenv("SQS_QUEUE_URL", sqsQueueURLTest)
 	os.Unsetenv("REGION_ZONE") // Para asegurarnos de que se use la región por defecto

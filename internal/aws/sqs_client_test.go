@@ -50,10 +50,25 @@ func (m *MockSQSClient) GetQueueURL() string {
 const queueURL = "http://localhost:4566/000000000000/my-queue"
 const region = "us-east-1"
 
+func TestNonHTTPSURLInProd(t *testing.T) {
+	os.Setenv("APP_ENV", "prod")
+	defer os.Unsetenv("APP_ENV")
+
+	invalidURL := "http://non-https-url"
+	err := validateQueueURL(invalidURL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "only HTTPS URLs are allowed for non-local environments")
+}
+
 // Test para verificar la creación del cliente SQS con una URL válida
 func TestNewSQSClientValidURL(t *testing.T) {
+	// Configurar APP_ENV como "local"
 	os.Setenv("APP_ENV", "local")
 	defer os.Unsetenv("APP_ENV")
+
+	// Reiniciar Viper para asegurarse de que tome la variable de entorno
+	viper.Reset()
+	viper.AutomaticEnv()
 
 	client, err := NewSQSClient(queueURL, mockLoadConfigFunc)
 	assert.NoError(t, err)
@@ -82,15 +97,20 @@ func TestNewSQSClientLoadConfigError(t *testing.T) {
 	assert.Contains(t, err.Error(), "unable to load AWS SDK config")
 }
 
-// Test para verificar la creación de un cliente SQS en un entorno de producción
 func TestNewSQSClientProdEnv(t *testing.T) {
+	// Configurar APP_ENV como "prod"
 	os.Setenv("APP_ENV", "prod")
 	defer os.Unsetenv("APP_ENV")
 
-	client, err := NewSQSClient(queueURL, mockLoadConfigFunc)
-	assert.NoError(t, err)
-	assert.NotNil(t, client)
-	assert.Equal(t, queueURL, client.QueueURL)
+	// Usar una URL HTTPS válida para entornos de producción
+	validProdQueueURL := "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue"
+
+	client, err := NewSQSClient(validProdQueueURL, mockLoadConfigFunc)
+
+	// Verificar los resultados
+	assert.NoError(t, err)                              // No debe haber error
+	assert.NotNil(t, client)                            // El cliente no debe ser nil
+	assert.Equal(t, validProdQueueURL, client.QueueURL) // La URL debe coincidir
 }
 
 func TestSQSClientGetQueueURL(t *testing.T) {
@@ -102,58 +122,82 @@ func TestSQSClientGetQueueURL(t *testing.T) {
 
 // Test para verificar que DeleteMessage funciona correctamente con el mock
 func TestSQSClientDeleteMessage(t *testing.T) {
+	// Configura APP_ENV como "local"
+	os.Setenv("APP_ENV", "local")
+	defer os.Unsetenv("APP_ENV")
+
+	// Reinicia Viper y asegúrate de que use las variables de entorno
+	viper.Reset()
+	viper.AutomaticEnv()
+
 	// Crear el mock del cliente SQS
 	mockSQS := new(MockSQSClient)
 
-	// Crear el cliente SQS utilizando el mock
 	client := &SQSClient{
-		Client:   mockSQS, // Usa el mock en lugar de *sqs.Client
+		Client:   mockSQS,
 		QueueURL: queueURL,
 	}
 
-	// Definir los inputs y outputs mockeados
 	mockInput := &sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(client.GetQueueURL()),
 		ReceiptHandle: aws.String("test-receipt-handle"),
 	}
 	mockOutput := &sqs.DeleteMessageOutput{}
 
-	// Configurar el mock para que devuelva el valor esperado
+	// Configurar el mock para devolver el valor esperado
 	mockSQS.On("DeleteMessage", mock.Anything, mockInput, mock.Anything).Return(mockOutput, nil)
 
-	// Llamar a DeleteMessage usando el cliente mockeado
+	// Llamar a DeleteMessage
 	result, err := client.DeleteMessage(context.TODO(), mockInput)
 
 	// Verificar los resultados
 	assert.NoError(t, err)
+	assert.NotNil(t, result)
 	assert.Equal(t, mockOutput, result)
+
+	// Verificar que se cumplieron las expectativas del mock
 	mockSQS.AssertExpectations(t)
 }
 
 func TestSQSClientSendMessage(t *testing.T) {
-	// Crear un mock del cliente SQS
+	// Configura APP_ENV como "local"
+	os.Setenv("APP_ENV", "local")
+	defer os.Unsetenv("APP_ENV")
+
+	// Reinicia Viper para asegurarse de que use las variables de entorno
+	viper.Reset()
+	viper.AutomaticEnv()
+
+	// Crear el mock del cliente SQS
 	mockSQS := new(MockSQSClient)
+
+	// Crear el cliente SQS utilizando el mock
 	client := &SQSClient{
 		Client:   mockSQS,
-		QueueURL: queueURL,
+		QueueURL: queueURL, // Debe coincidir exactamente con el mock
 	}
 
-	// Definir los inputs y outputs mockeados
+	// Definir los inputs y outputs del mensaje
 	mockInput := &sqs.SendMessageInput{
 		QueueUrl:    aws.String(client.GetQueueURL()),
 		MessageBody: aws.String("test message"),
 	}
-	mockOutput := &sqs.SendMessageOutput{}
+	mockOutput := &sqs.SendMessageOutput{
+		MessageId: aws.String("12345"), // Simulando un ID de mensaje
+	}
 
-	// Configurar el mock para que devuelva el valor esperado
+	// Configurar el mock para devolver el valor esperado
 	mockSQS.On("SendMessage", mock.Anything, mockInput, mock.Anything).Return(mockOutput, nil)
 
-	// Llamar a SendMessage usando el cliente mockeado
+	// Llamar a SendMessage
 	result, err := client.SendMessage(context.TODO(), mockInput)
 
 	// Verificar los resultados
-	assert.NoError(t, err)
-	assert.Equal(t, mockOutput, result)
+	assert.NoError(t, err) // No debe haber error
+	assert.NotNil(t, result)
+	assert.Equal(t, "12345", *result.MessageId) // Verifica el ID del mensaje
+
+	// Verificar que se cumplieron las expectativas del mock
 	mockSQS.AssertExpectations(t)
 }
 
@@ -208,4 +252,133 @@ func TestGetEndpointResolverUnknownService(t *testing.T) {
 	_, err := resolver.ResolveEndpoint("unknown-service", "us-east-1")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown service")
+}
+
+func TestDeleteMessageInputValidationFailed(t *testing.T) {
+	mockClient := new(MockSQSClient)
+	client := &SQSClient{
+		Client:   mockClient,
+		QueueURL: queueURL,
+	}
+
+	// Usar un input inválido (input nil)
+	_, err := client.DeleteMessage(context.TODO(), nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "input validation failed")
+}
+
+func TestDeleteMessageEmptyReceiptHandle(t *testing.T) {
+	client := &SQSClient{
+		QueueURL: queueURL,
+	}
+
+	input := &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(queueURL),
+		ReceiptHandle: aws.String(""), // Receipt handle vacío
+	}
+
+	_, err := client.DeleteMessage(context.TODO(), input)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "receipt handle is required and cannot be empty")
+}
+
+func TestInvalidQueueURL(t *testing.T) {
+	invalidURL := "invalid-url"
+	err := validateQueueURL(invalidURL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid queue URL")
+}
+
+func TestSendMessageEmptyBody(t *testing.T) {
+	client := &SQSClient{
+		QueueURL: queueURL,
+	}
+
+	input := &sqs.SendMessageInput{
+		QueueUrl:    aws.String(queueURL),
+		MessageBody: aws.String(""), // Cuerpo del mensaje vacío
+	}
+
+	// Capturar ambos valores: el resultado y el error
+	_, err := client.SendMessage(context.TODO(), input)
+
+	// Verificar que el error no sea nulo y contenga el mensaje esperado
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "message body is required and cannot be empty")
+}
+
+func TestSendMessageEmptyQueueURL(t *testing.T) {
+	client := &SQSClient{
+		QueueURL: "",
+	}
+
+	input := &sqs.SendMessageInput{
+		MessageBody: aws.String("test message"),
+	}
+
+	_, err := client.SendMessage(context.TODO(), input)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "queue URL is required and cannot be empty")
+}
+
+func TestSendMessageInputNil(t *testing.T) {
+	client := &SQSClient{
+		QueueURL: queueURL,
+	}
+
+	// Llamar a SendMessage con input nil
+	_, err := client.SendMessage(context.TODO(), nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "input cannot be nil")
+}
+
+func TestDeleteMessageFailed(t *testing.T) {
+	// Crear un mock del cliente SQS
+	mockSQS := new(MockSQSClient)
+
+	client := &SQSClient{
+		Client:   mockSQS,
+		QueueURL: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue", // URL válida
+	}
+
+	// Definir el input con datos válidos
+	input := &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(client.GetQueueURL()),
+		ReceiptHandle: aws.String("valid-receipt-handle"),
+	}
+
+	// Configurar el mock para que devuelva un error y un valor *sqs.DeleteMessageOutput nil
+	mockSQS.On("DeleteMessage", mock.Anything, input, mock.Anything).
+		Return((*sqs.DeleteMessageOutput)(nil), fmt.Errorf("failed to delete message"))
+
+	// Llamar a DeleteMessage usando el cliente mockeado
+	_, err := client.DeleteMessage(context.TODO(), input)
+
+	// Verificar los resultados
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete message")
+	mockSQS.AssertExpectations(t)
+}
+
+func TestDeleteMessageEmptyQueueURL(t *testing.T) {
+	client := &SQSClient{
+		QueueURL: "",
+	}
+
+	input := &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(""),
+		ReceiptHandle: aws.String("valid-handle"),
+	}
+
+	_, err := client.DeleteMessage(context.TODO(), input)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "queue URL is required and cannot be empty")
+}
+
+func TestSanitizeString(t *testing.T) {
+	input := " test string "
+	expected := "test+string" // Espacios son reemplazados por +
+	result := sanitizeString(input)
+
+	assert.Equal(t, expected, result)
 }

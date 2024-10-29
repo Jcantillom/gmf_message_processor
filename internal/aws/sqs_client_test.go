@@ -374,11 +374,3 @@ func TestDeleteMessageEmptyQueueURL(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "queue URL is required and cannot be empty")
 }
-
-func TestSanitizeString(t *testing.T) {
-	input := " test string "
-	expected := "test+string" // Espacios son reemplazados por +
-	result := sanitizeString(input)
-
-	assert.Equal(t, expected, result)
-}

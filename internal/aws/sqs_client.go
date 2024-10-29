@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -70,7 +69,7 @@ func (s *SQSClient) DeleteMessage(
 	opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
 
 	// Validar y sanitizar el input antes de ejecutar la solicitud.
-	if err := sanitizeAndValidateInput(input); err != nil {
+	if err := validateInput(input); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
@@ -83,8 +82,8 @@ func (s *SQSClient) DeleteMessage(
 	return output, nil
 }
 
-// sanitizeAndValidateInput aplica validaciones al input.
-func sanitizeAndValidateInput(input *sqs.DeleteMessageInput) error {
+// validateInput aplica validaciones y sanitiza el input.
+func validateInput(input *sqs.DeleteMessageInput) error {
 	if input == nil {
 		return fmt.Errorf("input cannot be nil")
 	}
@@ -95,32 +94,22 @@ func sanitizeAndValidateInput(input *sqs.DeleteMessageInput) error {
 		return fmt.Errorf("queue URL is required and cannot be empty")
 	}
 
-	// Validar la URL.
+	// Validar la URL sin escaparla.
 	if err := validateQueueURL(*input.QueueUrl); err != nil {
 		return fmt.Errorf(messageInvalidURL, err)
 	}
 
-	// No modificar el ReceiptHandle.
 	return nil
 }
 
-// sanitizeString aplica una sanitización más estricta.
-func sanitizeString(input string) string {
-	// Escapar caracteres no permitidos en las entradas.
-	return url.QueryEscape(strings.TrimSpace(input))
-}
-
-// validateQueueURL valida la URL de la cola SQS.
 func validateQueueURL(queueURL string) error {
-	parsedURL, err := url.ParseRequestURI(queueURL)
-	if err != nil {
-		return fmt.Errorf(messageInvalidURL, err)
+	parsedURL, err := url.Parse(queueURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return fmt.Errorf("invalid queue URL: %s", queueURL)
 	}
 
-	appEnv := viper.GetString("APP_ENV")
-
-	// Permitir HTTP solo en entornos locales
-	if parsedURL.Scheme != "https" && appEnv != "local" {
+	allowedSchemes := map[string]bool{"https": true}
+	if !allowedSchemes[parsedURL.Scheme] && viper.GetString("APP_ENV") != "local" {
 		return fmt.Errorf("only HTTPS URLs are allowed for non-local environments")
 	}
 
@@ -162,7 +151,8 @@ func validateSendMessageInput(input *sqs.SendMessageInput) error {
 func NewSQSClient(
 	queueURL string,
 	loadConfigFunc func(
-		ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
+		ctx context.Context,
+		optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
 
 	// Validar la URL de la cola.
 	if err := validateQueueURL(queueURL); err != nil {

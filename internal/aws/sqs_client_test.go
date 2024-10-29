@@ -264,7 +264,7 @@ func TestDeleteMessageInputValidationFailed(t *testing.T) {
 	// Usar un input inválido (input nil)
 	_, err := client.DeleteMessage(context.TODO(), nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "input validation failed")
+	assert.Contains(t, err.Error(), "sanitization failed: input cannot be nil")
 }
 
 func TestDeleteMessageEmptyReceiptHandle(t *testing.T) {

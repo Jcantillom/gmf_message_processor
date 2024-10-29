@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -44,13 +45,13 @@ func (s *SQSClient) GetQueueURL() string {
 // newSecureHTTPClient crea un cliente HTTP seguro con configuraciones específicas.
 func newSecureHTTPClient() *http.Client {
 	return &http.Client{
-		Timeout: 30 * time.Second, // Limitar el tiempo máximo de las solicitudes
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12, // Asegurar el uso de TLS 1.2 o superior
+				MinVersion: tls.VersionTLS12,
 			},
 			DisableKeepAlives:     false,
-			MaxIdleConns:          10, // Limitar las conexiones ociosas
+			MaxIdleConns:          10,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
@@ -68,13 +69,14 @@ func (s *SQSClient) DeleteMessage(
 	input *sqs.DeleteMessageInput,
 	opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
 
-	// Validar y sanitizar el input antes de ejecutar la solicitud.
-	if err := validateInput(input); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+	// Validar y sanitizar el input de forma más estricta.
+	sanitizedInput, err := sanitizeDeleteMessageInput(input)
+	if err != nil {
+		return nil, fmt.Errorf("sanitization failed: %w", err)
 	}
 
-	// Ejecutar la operación de DeleteMessage de forma segura.
-	output, err := s.Client.DeleteMessage(ctx, input, opts...)
+	// Ejecutar la operación DeleteMessage de forma segura.
+	output, err := s.Client.DeleteMessage(ctx, sanitizedInput, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete message: %w", err)
 	}
@@ -82,24 +84,31 @@ func (s *SQSClient) DeleteMessage(
 	return output, nil
 }
 
-// validateInput aplica validaciones y sanitiza el input.
-func validateInput(input *sqs.DeleteMessageInput) error {
+// sanitizeDeleteMessageInput aplica validaciones estrictas y sanitiza el input.
+func sanitizeDeleteMessageInput(input *sqs.DeleteMessageInput) (*sqs.DeleteMessageInput, error) {
 	if input == nil {
-		return fmt.Errorf("input cannot be nil")
+		return nil, fmt.Errorf("input cannot be nil")
 	}
 	if input.ReceiptHandle == nil || *input.ReceiptHandle == "" {
-		return fmt.Errorf("receipt handle is required and cannot be empty")
+		return nil, fmt.Errorf("receipt handle is required and cannot be empty")
 	}
 	if input.QueueUrl == nil || *input.QueueUrl == "" {
-		return fmt.Errorf("queue URL is required and cannot be empty")
+		return nil, fmt.Errorf("queue URL is required and cannot be empty")
 	}
 
-	// Validar la URL sin escaparla.
+	// Validar que el ReceiptHandle no contenga caracteres sospechosos.
+	if strings.ContainsAny(*input.ReceiptHandle, "<>`'\"") {
+		return nil, fmt.Errorf("receipt handle contains invalid characters")
+	}
+
+	// Validar la URL.
 	if err := validateQueueURL(*input.QueueUrl); err != nil {
-		return fmt.Errorf(messageInvalidURL, err)
+		return nil, fmt.Errorf(messageInvalidURL, err)
 	}
 
-	return nil
+	// Clonar el input para evitar mutaciones inesperadas.
+	sanitizedInput := *input
+	return &sanitizedInput, nil
 }
 
 func validateQueueURL(queueURL string) error {
@@ -122,7 +131,6 @@ func (s *SQSClient) SendMessage(
 	input *sqs.SendMessageInput,
 	opts ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
 
-	// Validar el input para SendMessage.
 	if err := validateSendMessageInput(input); err != nil {
 		return nil, err
 	}
@@ -130,7 +138,6 @@ func (s *SQSClient) SendMessage(
 	return s.Client.SendMessage(ctx, input, opts...)
 }
 
-// validateSendMessageInput valida el input del mensaje.
 func validateSendMessageInput(input *sqs.SendMessageInput) error {
 	if input == nil {
 		return fmt.Errorf("input cannot be nil")
@@ -154,20 +161,17 @@ func NewSQSClient(
 		ctx context.Context,
 		optFns ...func(*config.LoadOptions) error) (aws.Config, error)) (*SQSClient, error) {
 
-	// Validar la URL de la cola.
 	if err := validateQueueURL(queueURL); err != nil {
 		return nil, fmt.Errorf("invalid queue URL provided: %w", err)
 	}
 
-	// Cargar la configuración de AWS.
 	cfg, err := loadConfigFunc(context.TODO(), config.WithEndpointResolver(getEndpointResolver()))
 	if err != nil {
 		return nil, fmt.Errorf("unable to load AWS SDK config: %w", err)
 	}
 
-	// Crear el cliente SQS utilizando un cliente HTTP seguro.
 	client := sqs.NewFromConfig(cfg, func(o *sqs.Options) {
-		o.HTTPClient = newSecureHTTPClient() // Aplicar cliente HTTP seguro.
+		o.HTTPClient = newSecureHTTPClient()
 	})
 
 	return &SQSClient{
@@ -176,7 +180,6 @@ func NewSQSClient(
 	}, nil
 }
 
-// getEndpointResolver devuelve un resolutor de endpoint según el entorno.
 func getEndpointResolver() aws.EndpointResolver {
 	appEnv := viper.GetString("APP_ENV")
 

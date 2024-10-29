@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+const (
+	messageInvalidURL = "invalid queue URL: %v"
+)
+
 // SQSAPI define una interfaz para las operaciones de SQS.
 type SQSAPI interface {
 	DeleteMessage(
@@ -93,7 +97,7 @@ func sanitizeAndValidateInput(input *sqs.DeleteMessageInput) error {
 
 	// Validar la URL.
 	if err := validateQueueURL(*input.QueueUrl); err != nil {
-		return fmt.Errorf("invalid queue URL: %v", err)
+		return fmt.Errorf(messageInvalidURL, err)
 	}
 
 	// No modificar el ReceiptHandle.
@@ -110,7 +114,7 @@ func sanitizeString(input string) string {
 func validateQueueURL(queueURL string) error {
 	parsedURL, err := url.ParseRequestURI(queueURL)
 	if err != nil {
-		return fmt.Errorf("invalid queue URL: %v", err)
+		return fmt.Errorf(messageInvalidURL, err)
 	}
 
 	appEnv := viper.GetString("APP_ENV")
@@ -149,7 +153,7 @@ func validateSendMessageInput(input *sqs.SendMessageInput) error {
 		return fmt.Errorf("message body is required and cannot be empty")
 	}
 	if err := validateQueueURL(*input.QueueUrl); err != nil {
-		return fmt.Errorf("invalid queue URL: %v", err)
+		return fmt.Errorf(messageInvalidURL, err)
 	}
 	return nil
 }

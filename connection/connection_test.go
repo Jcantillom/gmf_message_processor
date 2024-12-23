@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
-	"github.com/joho/godotenv"
 	"gmf_message_processor/internal/logs"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -460,30 +459,42 @@ func TestGetSecretAWSSessionError(t *testing.T) {
 }
 
 func TestBuildDSNSSLModeDefault(t *testing.T) {
-	// Cargar las variables del archivo .env.test
-	err := godotenv.Load(envPath)
-	if err != nil {
-		t.Fatalf("No se pudo cargar el archivo .env.test: %v", err)
+	// Simular las variables de entorno necesarias
+	mockEnv := map[string]string{
+		"DB_USER":     "test_user",
+		"DB_PASSWORD": "test_password",
+		"DB_HOST":     "localhost",
+		"DB_PORT":     "5432",
+		"DB_NAME":     "test_db",
+		"DB_SSLMODE":  "disable",
+	}
+
+	// Establecer las variables de entorno simuladas
+	for key, value := range mockEnv {
+		err := os.Setenv(key, value)
+		if err != nil {
+			t.Fatalf("No se pudo establecer la variable de entorno %s: %v", key, err)
+		}
 	}
 
 	// Simular los datos secretos
 	secretData := &SecretData{
-		Username: os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
+		Username: mockEnv["DB_USER"],
+		Password: mockEnv["DB_PASSWORD"],
 	}
 
 	// Construir el DSN utilizando las variables de entorno cargadas
 	dsn := buildDSN(secretData)
 
-	// Crear dinámicamente el DSN esperado a partir de las mismas variables
+	// Crear dinámicamente el DSN esperado a partir de las variables simuladas
 	expectedDSN := fmt.Sprintf(
 		dsnString,
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_SSLMODE"),
+		mockEnv["DB_HOST"],
+		mockEnv["DB_PORT"],
+		mockEnv["DB_USER"],
+		mockEnv["DB_PASSWORD"],
+		mockEnv["DB_NAME"],
+		mockEnv["DB_SSLMODE"],
 	)
 
 	// Verificar que el DSN generado coincide con el esperado
@@ -535,10 +546,20 @@ func TestGetDBConnectionError(t *testing.T) {
 }
 
 func TestBuildDSNAndOpenConnectionExplicitCoverage(t *testing.T) {
+	// Simular las variables de entorno necesarias
+	mockEnv := map[string]string{
+		"DB_HOST":    "localhost",
+		"DB_PORT":    "5432",
+		"DB_NAME":    "test_db",
+		"DB_SSLMODE": "disable",
+	}
 
-	err := godotenv.Load(envPath)
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	// Establecer las variables de entorno simuladas
+	for key, value := range mockEnv {
+		err := os.Setenv(key, value)
+		if err != nil {
+			t.Fatalf("No se pudo establecer la variable de entorno %s: %v", key, err)
+		}
 	}
 
 	// Crear un mock para SecretService
@@ -573,12 +594,12 @@ func TestBuildDSNAndOpenConnectionExplicitCoverage(t *testing.T) {
 	dsn := buildDSN(&SecretData{Username: "postgres", Password: "postgres"})
 	expectedDSN := fmt.Sprintf(
 		dsnString,
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
+		mockEnv["DB_HOST"],
+		mockEnv["DB_PORT"],
 		"postgres",
 		"postgres",
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_SSLMODE"),
+		mockEnv["DB_NAME"],
+		mockEnv["DB_SSLMODE"],
 	)
 	assert.Equal(t, expectedDSN, dsn, "El DSN generado no es el esperado")
 
@@ -784,19 +805,47 @@ func TestNewSessionError(t *testing.T) {
 }
 
 func TestDBManagerOpenConnectionError(t *testing.T) {
-	err := godotenv.Load(envPath)
-	assert.NoError(t, err)
+	// Simular las variables de entorno necesarias
+	mockEnv := map[string]string{
+		"DB_HOST":     "invalid_host",
+		"DB_PORT":     "5432",
+		"DB_USER":     "dbuser",
+		"DB_PASSWORD": "dbpassword",
+		"DB_NAME":     "testdb",
+		"DB_SSLMODE":  "disable",
+	}
 
+	// Establecer las variables de entorno simuladas
+	for key, value := range mockEnv {
+		err := os.Setenv(key, value)
+		if err != nil {
+			t.Fatalf("No se pudo establecer la variable de entorno %s: %v", key, err)
+		}
+	}
+
+	// Crear un servicio secreto simulado
 	mockService := createMockSecretService()
 	dbManager := NewDBManager(mockService, nil)
 
-	os.Setenv("DB_HOST", "invalid_host")
+	// Crear un logger para GORM
 	logger := createGormLogger()
 
-	dsn := fmt.Sprintf(dsnString, "invalid_host", "5432", "dbuser", "dbpassword", "testdb", "disable")
-	err = dbManager.openConnection(postgres.Open(dsn), logger, "testMessageID")
+	// Construir el DSN con los valores simulados
+	dsn := fmt.Sprintf(
+		dsnString,
+		mockEnv["DB_HOST"],
+		mockEnv["DB_PORT"],
+		mockEnv["DB_USER"],
+		mockEnv["DB_PASSWORD"],
+		mockEnv["DB_NAME"],
+		mockEnv["DB_SSLMODE"],
+	)
 
-	assert.Error(t, err)
+	// Intentar abrir la conexión con un host inválido
+	err := dbManager.openConnection(postgres.Open(dsn), logger, "testMessageID")
+
+	// Verificar que se produce un error
+	assert.Error(t, err, "Se esperaba un error al intentar abrir la conexión con un host inválido")
 }
 
 func TestCloseDBErrorHandling(t *testing.T) {
@@ -902,44 +951,76 @@ func TestSecretServiceEmptySecret(t *testing.T) {
 }
 
 func TestBuildDSNAndOpenConnectionSuccess(t *testing.T) {
-	err := godotenv.Load(envPath)
-	assert.NoError(t, err)
+	// Simular las variables de entorno necesarias
+	mockEnv := map[string]string{
+		"DB_HOST":    "localhost",
+		"DB_PORT":    "5432",
+		"DB_NAME":    "testdb",
+		"DB_SSLMODE": "require", // Aseguramos consistencia con el valor generado
+	}
 
+	// Establecer las variables de entorno simuladas
+	for key, value := range mockEnv {
+		err := os.Setenv(key, value)
+		if err != nil {
+			t.Fatalf("No se pudo establecer la variable de entorno %s: %v", key, err)
+		}
+	}
+
+	// Crear un servicio secreto simulado
 	mockService := createMockSecretService()
 	dbManager := NewDBManager(mockService, nil)
 
+	// Crear un mock de SQL usando sqlmock
 	mockDB, mock, err := sqlmock.New()
-	assert.NoError(t, err)
+	assert.NoError(t, err, "No se esperaba un error al crear el mock de SQL")
 
-	dialector := postgres.New(postgres.Config{Conn: mockDB})
+	// Configurar el dialector de GORM usando el mockDB
+	dialector := postgres.New(postgres.Config{
+		Conn: mockDB,
+	})
+
+	// Crear un logger para GORM
 	logger := createGormLogger()
 
+	// Construir el DSN con valores simulados
 	dsn := buildDSN(&SecretData{Username: "postgres", Password: "postgres"})
 	expectedDSN := fmt.Sprintf(
 		dsnString,
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		"postgres", "postgres",
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_SSLMODE"))
+		mockEnv["DB_HOST"],
+		mockEnv["DB_PORT"],
+		"postgres",
+		"postgres",
+		mockEnv["DB_NAME"],
+		mockEnv["DB_SSLMODE"], // Aseguramos que use el sslmode esperado
+	)
 
-	assert.Equal(t, expectedDSN, dsn)
+	// Validar que el DSN generado es igual al esperado
+	assert.Equal(t, expectedDSN, dsn, "El DSN generado no es el esperado")
 
+	// Configurar expectativa para una consulta de verificación
 	mock.ExpectExec(selectVersionQuery).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	// Abrir la conexión usando el DSN generado
 	err = dbManager.openConnection(dialector, logger, "testMessageID")
-	assert.NoError(t, err)
+	assert.NoError(t, err, "No se esperaba un error al abrir la conexión")
 
+	// Verificar que la conexión SQL se obtiene correctamente
 	sqlDB, err := dbManager.DB.DB()
-	assert.NoError(t, err)
+	assert.NoError(t, err, "No se esperaba un error al obtener la conexión")
 
+	// Ejecutar una consulta para validar la conexión
 	_, err = sqlDB.Exec(selectVersionQuery)
-	assert.NoError(t, err)
+	assert.NoError(t, err, "No se esperaba un error al ejecutar la consulta SQL")
 
+	// Configurar la expectativa de cierre
 	mock.ExpectClose()
-	err = sqlDB.Close()
-	assert.NoError(t, err)
 
+	// Cerrar la conexión y verificar errores
+	err = sqlDB.Close()
+	assert.NoError(t, err, "No se esperaba un error al cerrar la conexión")
+
+	// Verificar expectativas del mock
 	assert.NoError(t, mock.ExpectationsWereMet(), logExpectedMock)
 }
 
